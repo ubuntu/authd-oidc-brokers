@@ -9,7 +9,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	github.com/ubuntu/decorate v0.0.0-20231211084900-69db9a41777a
 	github.com/ubuntu/go-i18n v0.0.0-20231113092927-594c1754ca47
 	gopkg.in/yaml.v3 v3.0.1
