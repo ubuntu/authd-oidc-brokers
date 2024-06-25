@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -92,6 +93,11 @@ var supportedUILayouts = map[string]map[string]string{
 	},
 	"qrcode-without-wait": {
 		"type": "qrcode",
+	},
+	"qrcode-with-code": {
+		"type": "qrcode",
+		"wait": "true",
+		"code": "required",
 	},
 
 	"newpassword": {
@@ -191,12 +197,17 @@ func TestSelectAuthenticationMode(t *testing.T) {
 	tests := map[string]struct {
 		modeName string
 
-		customHandlers map[string]testutils.ProviderHandler
+		customHandlers   map[string]testutils.ProviderHandler
+		supportedLayouts []map[string]string
 
 		wantErr bool
 	}{
-		"Successfully select password":    {modeName: "password"},
-		"Successfully select qrcode":      {modeName: "qrcode"},
+		"Successfully select password": {modeName: "password"},
+		"Successfully select qrcode":   {modeName: "qrcode"},
+		"Successfully select qrcode with code": {
+			modeName:         "qrcode-with-code",
+			supportedLayouts: append(slices.Clone(supportedLayouts), supportedUILayouts["qrcode-with-code"]),
+		},
 		"Successfully select newpassword": {modeName: "newpassword"},
 
 		"Error when selecting invalid mode": {modeName: "invalid", wantErr: true},
@@ -223,8 +234,13 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth")
 
+			layouts := tc.supportedLayouts
+			if layouts == nil {
+				layouts = slices.Clone(supportedLayouts)
+			}
+
 			// We need to do a GAM call first to get all the modes.
-			_, err := b.GetAuthenticationModes(sessionID, supportedLayouts)
+			_, err := b.GetAuthenticationModes(sessionID, layouts)
 			require.NoError(t, err, "Setup: GetAuthenticationModes should not have returned an error")
 
 			got, err := b.SelectAuthenticationMode(sessionID, tc.modeName)

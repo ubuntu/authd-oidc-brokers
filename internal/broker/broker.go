@@ -241,6 +241,10 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]st
 			if !strings.Contains(layout["wait"], "true") {
 				continue
 			}
+			if layout["code"] != "" {
+				supportedModes["qrcode-with-code"] = "Device Authentication"
+				continue
+			}
 			supportedModes["qrcode"] = "Device Authentication"
 
 		case "form":
@@ -292,7 +296,8 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 
 	var uiLayout map[string]string
 	switch authModeID {
-	case "qrcode":
+	case "qrcode", "qrcode-with-code":
+		hasCode := authModeID == "qrcode-with-code"
 		response, err := b.auth.oauthCfg.DeviceAuth(context.TODO())
 		if err != nil {
 			return nil, fmt.Errorf("could not generate QR code layout: %v", err)
@@ -309,6 +314,14 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 			"wait":    "true",
 			"button":  "regenerate QR code",
 			"content": response.VerificationURI,
+		}
+
+		if hasCode {
+			uiLayout["label"] = fmt.Sprintf(
+				"Scan the QR code or access %q and use the provided code",
+				response.VerificationURI,
+			)
+			uiLayout["code"] = response.UserCode
 		}
 
 	case "password":
