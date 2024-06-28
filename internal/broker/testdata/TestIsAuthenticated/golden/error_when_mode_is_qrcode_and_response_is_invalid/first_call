@@ -1,3 +1,6 @@
 access: denied
-data: '{"message": "could not get required response"}'
+data: |-
+    {
+      "message": "could not get required response"
+    }
 err: <nil>

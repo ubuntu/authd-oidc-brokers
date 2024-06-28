@@ -1,7 +1,9 @@
 package broker
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -105,5 +107,12 @@ func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (st
 		return "", err
 	}
 
-	return b.userInfoFromClaims(uInfo, groups)
+	userInfo := b.userInfoFromClaims(uInfo, groups)
+	data, err := json.Marshal(userInfo)
+	if err != nil {
+		return "", err
+	}
+	var indented bytes.Buffer
+	err = json.Indent(&indented, data, "", "\t\t")
+	return indented.String(), err
 }

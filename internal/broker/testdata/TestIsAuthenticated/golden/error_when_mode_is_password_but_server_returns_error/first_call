@@ -1,5 +1,6 @@
 access: retry
 data: |-
-    {"message": "could not authenticate user: could not load cached info: could not refresh token: oauth2: cannot fetch token: 400 Bad Request
-    Response: "}
+    {
+      "message": "could not authenticate user: could not load cached info: could not refresh token: oauth2: cannot fetch token: 400 Bad Request\nResponse: "
+    }
 err: <nil>
