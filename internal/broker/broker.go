@@ -2,7 +2,6 @@
 package broker
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -17,7 +16,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -366,30 +364,27 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	defer b.CancelIsAuthenticated(sessionID)
 
 	authDone := make(chan struct{})
-	var access, data string
+	var result isAuthenticatedResult
 	go func() {
-		access, data = b.handleIsAuthenticated(ctx, &session, authData).result()
+		result = b.handleIsAuthenticated(ctx, &session, authData)
 		close(authDone)
 	}()
 
 	select {
 	case <-authDone:
 	case <-ctx.Done():
-		access, data := isAuthenticatedResult{
-			access:  AuthCancelled,
-			Message: "authentication request cancelled",
-		}.result()
-		return access, data, ctx.Err()
+		result := isAuthenticatedResult{Message: "authentication request cancelled"}
+		data, _ := result.toJSON()
+		return data, AuthCancelled, ctx.Err()
 	}
 
-	switch access {
+	switch result.access {
 	case AuthRetry:
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
-			access, data = isAuthenticatedResult{
-				access:  AuthDenied,
-				Message: "maximum number of attempts reached",
-			}.result()
+			result := isAuthenticatedResult{Message: "maximum number of attempts reached"}
+			data, _ := result.toJSON()
+			return data, AuthDenied, nil
 		}
 
 	case AuthNext:
@@ -399,7 +394,17 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	if err = b.updateSession(sessionID, session); err != nil {
 		return AuthDenied, "", err
 	}
-	return access, data, nil
+
+	data, err := result.toJSON()
+	if err == nil {
+		return result.access, data, nil
+	}
+
+	slog.Debug(fmt.Sprintf("Impossible to convert to JSON %#v: %v", result, err))
+	if result.access == AuthDenied {
+		return result.access, data, nil
+	}
+	return AuthRetry, `{"message": "authentication data encoding failure"}`, nil
 }
 
 type isAuthenticatedResult struct {
@@ -408,33 +413,13 @@ type isAuthenticatedResult struct {
 	Message  string          `json:"message,omitempty"`
 }
 
-func (iar *isAuthenticatedResult) encode() (string, error) {
+var stringifyJSON = func(b []byte, err error) (string, error) { return string(b), err }
+
+func (iar *isAuthenticatedResult) toJSON() (string, error) {
 	if iar.UserInfo == nil && iar.Message == "" {
 		return "", nil
 	}
-	b, err := json.Marshal(iar)
-	if err != nil {
-		return "", err
-	}
-	if testing.Testing() {
-		// Indent in testing, for improve readability of golden files
-		var indented bytes.Buffer
-		err = json.Indent(&indented, b, "", "  ")
-		if err != nil {
-			return "", err
-		}
-		b = indented.Bytes()
-	}
-	return string(b), err
-}
-
-func (iar isAuthenticatedResult) result() (string, string) {
-	ret, err := iar.encode()
-	if err != nil {
-		slog.Debug(fmt.Sprintf("Error when encoding %#v: %v", iar, err))
-		return iar.access, ""
-	}
-	return iar.access, ret
+	return stringifyJSON(json.Marshal(iar))
 }
 
 func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo, authData map[string]string) isAuthenticatedResult {

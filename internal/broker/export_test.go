@@ -116,3 +116,16 @@ func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (st
 	err = json.Indent(&indented, data, "", "\t\t")
 	return indented.String(), err
 }
+
+func init() {
+	defaultStringifyJSON := stringifyJSON
+	stringifyJSON = func(b []byte, err error) (string, error) {
+		if err != nil {
+			return defaultStringifyJSON(b, err)
+		}
+		// Indent in testing, to improve readability of golden files
+		var indented bytes.Buffer
+		err = json.Indent(&indented, b, "", "  ")
+		return defaultStringifyJSON(indented.Bytes(), err)
+	}
+}
