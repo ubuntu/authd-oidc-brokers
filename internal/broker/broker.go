@@ -413,13 +413,12 @@ type isAuthenticatedResult struct {
 	Message  string          `json:"message,omitempty"`
 }
 
-var stringifyJSON = func(b []byte, err error) (string, error) { return string(b), err }
-
 func (iar *isAuthenticatedResult) toJSON() (string, error) {
 	if iar.UserInfo == nil && iar.Message == "" {
 		return "", nil
 	}
-	return stringifyJSON(json.Marshal(iar))
+	b, err := json.Marshal(iar)
+	return string(b), err
 }
 
 func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo, authData map[string]string) isAuthenticatedResult {
