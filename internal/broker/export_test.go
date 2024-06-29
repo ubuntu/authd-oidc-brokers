@@ -3,6 +3,7 @@ package broker
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -115,4 +116,18 @@ func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (st
 	var indented bytes.Buffer
 	err = json.Indent(&indented, data, "", "\t\t")
 	return indented.String(), err
+}
+
+var ErrTestChallengeDecodeError error
+
+func init() {
+	defaultDecodeRawChallenge := decodeRawChallenge
+	decodeRawChallenge = func(priv *rsa.PrivateKey, rawChallenge string) (decoded string, err error) {
+		if ErrTestChallengeDecodeError != nil {
+			err := ErrTestChallengeDecodeError
+			ErrTestChallengeDecodeError = nil
+			return "", err
+		}
+		return defaultDecodeRawChallenge(priv, rawChallenge)
+	}
 }

@@ -2,6 +2,7 @@ package broker_test
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http/httptest"
@@ -295,6 +296,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 		preexistentToken     string
 		invalidAuthData      bool
+		decodeChallengeError error
 		dontWaitForFirstCall bool
 		readOnlyCacheDir     bool
 	}{
@@ -318,11 +320,13 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 		},
 
-		"Error when authentication data is invalid":         {invalidAuthData: true},
-		"Error when challenge can not be decrypted":         {firstMode: "password", badFirstKey: true},
-		"Error when provided wrong challenge":               {firstMode: "password", preexistentToken: "valid", firstChallenge: "wrongpassword"},
-		"Error when can not cache token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyCacheDir: true},
-		"Error when IsAuthenticated is ongoing for session": {dontWaitForFirstCall: true, wantSecondCall: true},
+		"Error when authentication data is invalid":                        {invalidAuthData: true},
+		"Error when challenge decoding returns an error":                   {firstMode: "password", preexistentToken: "valid", decodeChallengeError: errors.New("key decoding failure message")},
+		"Error when challenge decoding returns an error with invalid JSON": {firstMode: "password", preexistentToken: "valid", decodeChallengeError: errors.New(`"this" needs to be\encoded`)},
+		"Error when challenge can not be decrypted":                        {firstMode: "password", badFirstKey: true},
+		"Error when provided wrong challenge":                              {firstMode: "password", preexistentToken: "valid", firstChallenge: "wrongpassword"},
+		"Error when can not cache token":                                   {firstChallenge: "-", wantSecondCall: true, readOnlyCacheDir: true},
+		"Error when IsAuthenticated is ongoing for session":                {dontWaitForFirstCall: true, wantSecondCall: true},
 
 		"Error when mode is password and token does not exist": {firstMode: "password"},
 		"Error when mode is password but server returns error": {
@@ -388,6 +392,11 @@ func TestIsAuthenticated(t *testing.T) {
 				tok := generateCachedInfo(t, tc.preexistentToken, provider.URL)
 				err := b.CacheAuthInfo(sessionID, tok, correctPassword)
 				require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+			}
+
+			if tc.decodeChallengeError != nil {
+				broker.ErrTestChallengeDecodeError = tc.decodeChallengeError
+				t.Cleanup(func() { broker.ErrTestChallengeDecodeError = nil })
 			}
 
 			var readOnlyCacheCleanup, readOnlyTokenCleanup func()
