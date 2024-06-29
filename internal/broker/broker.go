@@ -374,8 +374,9 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	case <-authDone:
 	case <-ctx.Done():
 		result := isAuthenticatedResult{Message: "authentication request cancelled"}
+		// We ignore the error here, since we're returning a message anyways.
 		data, _ := result.toJSON()
-		return data, AuthCancelled, ctx.Err()
+		return AuthCancelled, data, ctx.Err()
 	}
 
 	switch result.access {
@@ -383,8 +384,9 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
 			result := isAuthenticatedResult{Message: "maximum number of attempts reached"}
+			// We ignore the error here, since we're returning a message anyways.
 			data, _ := result.toJSON()
-			return data, AuthDenied, nil
+			return AuthDenied, data, nil
 		}
 
 	case AuthNext:
@@ -396,15 +398,15 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	}
 
 	data, err := result.toJSON()
-	if err == nil {
-		return result.access, data, nil
+	if err != nil {
+		slog.Debug(fmt.Sprintf("Impossible to convert to JSON %#v: %v", result, err))
+		if result.access == AuthDenied {
+			return result.access, data, nil
+		}
+		return AuthRetry, `{"message": "authentication data encoding failure"}`, nil
 	}
 
-	slog.Debug(fmt.Sprintf("Impossible to convert to JSON %#v: %v", result, err))
-	if result.access == AuthDenied {
-		return result.access, data, nil
-	}
-	return AuthRetry, `{"message": "authentication data encoding failure"}`, nil
+	return result.access, data, nil
 }
 
 type isAuthenticatedResult struct {
