@@ -13,6 +13,20 @@ import (
 	"gopkg.in/ini.v1"
 )
 
+type option struct {
+	busName string
+}
+
+// Option is a function that configures the service.
+type Option func(*option)
+
+// WithBusName sets the bus name of the service.
+func WithBusName(name string) Option {
+	return func(o *option) {
+		o.busName = name
+	}
+}
+
 const intro = `
 <node>
 	<interface name="%s">
@@ -60,7 +74,14 @@ type Service struct {
 }
 
 // New returns a new dbus service after exporting to the system bus our name.
-func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
+func New(_ context.Context, cfgPath, cachePath string, args ...Option) (s *Service, err error) {
+	opts := option{
+		busName: consts.DbusName,
+	}
+	for _, arg := range args {
+		arg(&opts)
+	}
+
 	cfg, err := parseConfig(cfgPath)
 	if err != nil {
 		return nil, err
@@ -83,7 +104,7 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
-	name := consts.DbusName
+	name := opts.busName
 	object := dbus.ObjectPath(consts.DbusObject)
 	iface := "com.ubuntu.authd.Broker"
 	s = &Service{
@@ -104,7 +125,7 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
-	reply, err := conn.RequestName(consts.DbusName, dbus.NameFlagDoNotQueue)
+	reply, err := conn.RequestName(opts.busName, dbus.NameFlagDoNotQueue)
 	if err != nil {
 		s.disconnect()
 		return nil, err

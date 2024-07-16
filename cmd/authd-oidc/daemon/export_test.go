@@ -20,7 +20,7 @@ func NewForTests(t *testing.T, conf *DaemonConfig, providerURL string, args ...s
 	t.Helper()
 
 	p := GenerateTestConfig(t, conf, providerURL)
-	argsWithConf := []string{"--config", p}
+	argsWithConf := []string{"--execbusname", "com.ubuntu.authd." + t.Name(), "--config", p}
 	argsWithConf = append(argsWithConf, args...)
 
 	a := New(t.Name())
@@ -51,12 +51,6 @@ func GenerateTestConfig(t *testing.T, origConf *daemonConfig, providerURL string
 	}
 
 	brokerCfg := fmt.Sprintf(`
-[authd]
-name = %[1]s
-brand_icon = broker_icon.png
-dbus_name = com.ubuntu.authd.%[1]s
-dbus_object = /com/ubuntu/authd/%[1]s
-
 [oidc]
 issuer = %[2]s
 client_id = client_id

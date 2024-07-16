@@ -378,12 +378,12 @@ func captureStdout(t *testing.T) func() string {
 
 func TestMain(m *testing.M) {
 	// Start system bus mock.
-	cleanup, err := testutils.StartSystemBusMock()
+	busCleanup, err := testutils.StartSystemBusMock()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
-	defer cleanup()
+	defer busCleanup()
 
 	// Start provider mock
 	providerServer, cleanup := testutils.StartMockProvider("")

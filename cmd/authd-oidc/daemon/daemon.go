@@ -79,7 +79,7 @@ func New(name string) *App {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.serve(a.config)
+			return a.serve(cmd, a.config)
 		},
 		// We display usage error ourselves
 		SilenceErrors: true,
@@ -90,6 +90,7 @@ func New(name string) *App {
 
 	installVerbosityFlag(&a.rootCmd, a.viper)
 	installConfigFlag(&a.rootCmd)
+	installBusNameFlag(&a.rootCmd)
 
 	// subcommands
 	a.installVersion()
@@ -98,7 +99,7 @@ func New(name string) *App {
 }
 
 // serve creates new dbus service on the system bus. This call is blocking until we quit it.
-func (a *App) serve(config daemonConfig) error {
+func (a *App) serve(cmd *cobra.Command, config daemonConfig) error {
 	ctx := context.Background()
 
 	if err := ensureDirWithPerms(config.Paths.Cache, 0700); err != nil {
@@ -106,7 +107,14 @@ func (a *App) serve(config daemonConfig) error {
 		return fmt.Errorf("error initializing users cache directory at %q: %v", config.Paths.Cache, err)
 	}
 
-	s, err := dbusservice.New(ctx, config.Paths.BrokerConf, config.Paths.Cache)
+	// We don't care about the error here, as we will use the default name.
+	busName, _ := cmd.Flags().GetString("execbusname")
+	opts := []dbusservice.Option{}
+	if busName != "" {
+		opts = append(opts, dbusservice.WithBusName(busName))
+	}
+
+	s, err := dbusservice.New(ctx, config.Paths.BrokerConf, config.Paths.Cache, opts...)
 	if err != nil {
 		close(a.ready)
 		return err
@@ -135,6 +143,15 @@ func installVerbosityFlag(cmd *cobra.Command, viper *viper.Viper) *int {
 	}
 
 	return r
+}
+
+func installBusNameFlag(cmd *cobra.Command) *string {
+	flag := cmd.PersistentFlags().String("execbusname", "", "use the executable name as the bus name")
+	err := cmd.PersistentFlags().MarkHidden("execbusname")
+	if err != nil {
+		slog.Warn(err.Error())
+	}
+	return flag
 }
 
 // Run executes the command and associated process. It returns an error on syntax/usage error.
