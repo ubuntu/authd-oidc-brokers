@@ -198,8 +198,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 		}
 		if tokenExists {
 			offeredModes = append([]string{"password"}, offeredModes...)
-		}
-		if currentAuthStep > 0 {
+		} else if currentAuthStep > 0 {
 			offeredModes = []string{"newpassword"}
 		}
 	}
