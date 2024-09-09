@@ -8,7 +8,7 @@ linters:
     - durationcheck
     - errname
     - errorlint
-    - exportloopref
+    - copyloopvar
     - forbidigo
     - forcetypeassert
     - gci
