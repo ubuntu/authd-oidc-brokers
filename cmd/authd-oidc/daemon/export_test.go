@@ -76,7 +76,7 @@ client_id = client_id
 
 // Config returns a DaemonConfig for tests.
 //
-//nolint:revive // DaemonConfig is a type alias for tests
+//nolint:revive,nolintlint // DaemonConfig is a type alias for tests
 func (a App) Config() DaemonConfig {
 	return a.config
 }
