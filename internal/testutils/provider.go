@@ -293,12 +293,13 @@ func ExpiryDeviceAuthHandler() ProviderHandler {
 
 // MockProviderInfoer is a mock that implements the ProviderInfoer interface.
 type MockProviderInfoer struct {
-	Scopes          []string
-	Options         []oauth2.AuthCodeOption
-	Groups          []info.Group
-	GroupsErr       bool
-	FirstCallDelay  int
-	SecondCallDelay int
+	Scopes           []string
+	Options          []oauth2.AuthCodeOption
+	Groups           []info.Group
+	GroupsErr        bool
+	FirstCallDelay   int
+	SecondCallDelay  int
+	GetUserInfoFails bool
 
 	numCalls     int
 	numCallsLock sync.Mutex
@@ -347,6 +348,10 @@ func (p *MockProviderInfoer) GetExtraFields(token *oauth2.Token) map[string]inte
 
 // GetUserInfo is a no-op when no specific provider is in use.
 func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+	if p.GetUserInfoFails {
+		return info.User{}, errors.New("error requested in the mock")
+	}
+
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
