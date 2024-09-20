@@ -29,6 +29,8 @@ parts:
     source: .
     source-type: local
     plugin: go
+    build-packages:
+      - git
     build-snaps:
       - go
   config:
