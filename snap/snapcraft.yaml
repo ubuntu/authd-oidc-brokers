@@ -44,4 +44,4 @@ parts:
     plugin: nil
     build-packages:
       - git # The script needs Git.
-    override-build: ./snap/get_version
+    override-build: ./snap/set_version

@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+
+# Script to set the version of the snap.
+
+# The version is based on the most recent tag on the current branch that is not reachable from the main branch.
+# If the tag is prefixed with "<current branch name>-" the prefix is removed.
+# For example:
+# * 0.1 -> 0.1
+# * msentraid-0.1 -> 0.1 (when on the msentraid branch).
+
+# If the current commit is tagged, that tag is used as the version.
+# If the current commit is not tagged, the version is appended with:
+#   * <highest tag on the main branch>+<commit_sha> when on the main branch.
+#   * <highest tag on the current branch (not reachable from the main branch)>+<commit_sha>.<last_commit_merged_from_main> when on other branches.
+
+# The version is annotated with +dirty if there are uncommitted changes in the git repository.
+
+get_version() {
+    current_branch=$(git -C "${SNAPCRAFT_PART_SRC}" branch --show-current)
+
+    if [ "${current_branch}" = "main" ]; then
+        # Get highest tag (interpreted as a version number) on the current branch.
+        tag=$(git tag --sort=-version:refname --merged="${current_branch}" | head -n 1)
+    else
+        # Get highest tag on the current branch that is not reachable from the main branch.
+        tag=$(git tag --sort=-version:refname --merged="${current_branch}" --no-merged=main | head -n 1)
+    fi
+
+    if [ -z "${tag}" ]; then
+        # No tag found, use "notag" as version.
+        echo "notag"
+        return
+    fi
+
+    # Remove the branch prefix from the tag.
+    version=${tag#"${current_branch}"-}
+
+    if [ -n "${tag}" ] && [ "$(git describe --tags --exact-match 2>/dev/null)" = "${tag}" ]; then
+        # The current commit is tagged, so we don't need to append the commit SHA.
+        echo "${version}"
+        return
+    fi
+
+    # Current commit is not tagged, append commit SHA.
+    version="${version}+$(git -C "${SNAPCRAFT_PART_SRC}" rev-parse --short=7 HEAD)"
+
+    if [ "${current_branch}" = "main" ]; then
+        echo "${version}"
+        return
+    fi
+
+    # Append the short commit SHA of the last commit merged from the main branch.
+    # We can't use more than 7 characters because snap version strings are limited to 32 characters.
+    commit=$(git -C "${SNAPCRAFT_PART_SRC}" merge-base main HEAD)
+    short_sha=$(git -C "${SNAPCRAFT_PART_SRC}" rev-parse --short=7 "${commit}")
+    echo "${version}.${short_sha}"
+}
+
+version=$(get_version)
+
+# Append +dirty if there are uncommitted changes in the git repository.
+is_dirty=$(git -C "${SNAPCRAFT_PART_SRC}" status --porcelain)
+if [ -n "${is_dirty}" ]; then
+    version="${version}+dirty"
+fi
+
+craftctl set version="${version}"
