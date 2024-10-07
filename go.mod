@@ -9,7 +9,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
 	github.com/k0kubun/pp v3.0.1+incompatible
-	github.com/microsoftgraph/msgraph-sdk-go v1.48.0
+	github.com/microsoftgraph/msgraph-sdk-go v1.49.0
 	github.com/microsoftgraph/msgraph-sdk-go-core v1.2.1
 	github.com/otiai10/copy v1.14.0
 	github.com/spf13/cobra v1.8.1
