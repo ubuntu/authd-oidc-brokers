@@ -78,6 +78,13 @@ func (p Provider) getTokenScopes(token *oauth2.Token) ([]string, error) {
 	return strings.Split(scopesStr, " "), nil
 }
 
+// GetExtraFields returns the extra fields of the token which should be stored persistently.
+func (p Provider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
+	return map[string]interface{}{
+		"scope": token.Extra("scope"),
+	}
+}
+
 // GetUserInfo is a no-op when no specific provider is in use.
 func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
@@ -119,6 +126,8 @@ func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
 
 // getGroups access the Microsoft Graph API to get the groups the user is a member of.
 func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
+	slog.Debug("Getting user groups from Microsoft Graph API")
+
 	// Check if the token has the GroupMember.Read.All scope
 	scopes, err := p.getTokenScopes(token)
 	if err != nil {
@@ -200,6 +209,7 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 		groups = append(groups, result.GetValue()...)
 	}
 
+	slog.Debug(fmt.Sprintf("Got groups: %v", groups))
 	return groups, nil
 }
 
@@ -214,6 +224,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	endpoints map[string]struct{},
 	currentAuthStep int,
 ) ([]string, error) {
+	slog.Debug(fmt.Sprintf("In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep))
 	var offeredModes []string
 	switch sessionMode {
 	case "passwd":
@@ -236,6 +247,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 			offeredModes = []string{"newpassword"}
 		}
 	}
+	slog.Debug(fmt.Sprintf("Offered modes: %q", offeredModes))
 
 	for _, mode := range offeredModes {
 		if _, ok := supportedAuthModes[mode]; !ok {
