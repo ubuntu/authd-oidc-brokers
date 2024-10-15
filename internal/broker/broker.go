@@ -37,6 +37,7 @@ const (
 type Config struct {
 	IssuerURL          string
 	ClientID           string
+	ClientSecret       string
 	CachePath          string
 	HomeBaseDir        string
 	AllowedSSHSuffixes []string
@@ -47,6 +48,9 @@ type Broker struct {
 	providerInfo providers.ProviderInfoer
 	issuerURL    string
 	oidcCfg      oidc.Config
+
+	// optional fields
+	clientSecret string
 
 	cachePath          string
 	homeDirPath        string
@@ -136,6 +140,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		providerInfo:       opts.providerInfo,
 		issuerURL:          cfg.IssuerURL,
 		oidcCfg:            oidc.Config{ClientID: cfg.ClientID},
+		clientSecret:       cfg.ClientSecret,
 		cachePath:          cfg.CachePath,
 		homeDirPath:        homeDirPath,
 		allowedSSHSuffixes: cfg.AllowedSSHSuffixes,
@@ -195,9 +200,10 @@ func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err
 	}
 
 	oauthCfg := oauth2.Config{
-		ClientID: b.oidcCfg.ClientID,
-		Endpoint: provider.Endpoint(),
-		Scopes:   append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
+		ClientID:     b.oidcCfg.ClientID,
+		ClientSecret: b.clientSecret,
+		Endpoint:     provider.Endpoint(),
+		Scopes:       append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
 	}
 
 	return authConfig{provider: provider, oauth: oauthCfg}, nil

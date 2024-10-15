@@ -75,6 +75,7 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 	bCfg := broker.Config{
 		IssuerURL:          cfg[oidcSection][issuerKey],
 		ClientID:           cfg[oidcSection][clientIDKey],
+		ClientSecret:       cfg[oidcSection][clientSecretKey],
 		HomeBaseDir:        cfg[usersSection][homeDirKey],
 		AllowedSSHSuffixes: allowedSSHSuffixes,
 		CachePath:          cachePath,
