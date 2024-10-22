@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -293,10 +293,16 @@ func ExpiryDeviceAuthHandler() ProviderHandler {
 
 // MockProviderInfoer is a mock that implements the ProviderInfoer interface.
 type MockProviderInfoer struct {
-	Scopes    []string
-	Options   []oauth2.AuthCodeOption
-	Groups    []info.Group
-	GroupsErr bool
+	Scopes           []string
+	Options          []oauth2.AuthCodeOption
+	Groups           []info.Group
+	GroupsErr        bool
+	FirstCallDelay   int
+	SecondCallDelay  int
+	GetUserInfoFails bool
+
+	numCalls     int
+	numCallsLock sync.Mutex
 }
 
 // CheckTokenScopes checks if the token has the required scopes.
@@ -342,6 +348,10 @@ func (p *MockProviderInfoer) GetExtraFields(token *oauth2.Token) map[string]inte
 
 // GetUserInfo is a no-op when no specific provider is in use.
 func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+	if p.GetUserInfoFails {
+		return info.User{}, errors.New("error requested in the mock")
+	}
+
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
@@ -352,14 +362,16 @@ func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth
 		return info.User{}, err
 	}
 
-	// This is a special case for testing purposes. If the username starts with "user-timeout-", we will delay the
-	// return for a while to control the authentication order for multiple users.
-	if strings.HasPrefix(userClaims.Email, "user-timeout") {
-		d, err := strconv.Atoi(strings.TrimPrefix(userClaims.Email, "user-timeout-"))
-		if err != nil {
-			return info.User{}, err
-		}
-		time.Sleep(time.Duration(d) * time.Second)
+	p.numCallsLock.Lock()
+	numCalls := p.numCalls
+	p.numCalls++
+	p.numCallsLock.Unlock()
+
+	if numCalls == 0 && p.FirstCallDelay > 0 {
+		time.Sleep(time.Duration(p.FirstCallDelay) * time.Second)
+	}
+	if numCalls == 1 && p.SecondCallDelay > 0 {
+		time.Sleep(time.Duration(p.SecondCallDelay) * time.Second)
 	}
 
 	return info.NewUser(
@@ -401,7 +413,7 @@ func (p *MockProviderInfoer) getGroups(*oauth2.Token) ([]info.Group, error) {
 }
 
 // CurrentAuthenticationModesOffered returns the authentication modes supported by the provider.
-func (p MockProviderInfoer) CurrentAuthenticationModesOffered(
+func (p *MockProviderInfoer) CurrentAuthenticationModesOffered(
 	sessionMode string,
 	supportedAuthModes map[string]string,
 	tokenExists bool,

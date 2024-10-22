@@ -209,7 +209,12 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 		groups = append(groups, result.GetValue()...)
 	}
 
-	slog.Debug(fmt.Sprintf("Got groups: %v", groups))
+	var groupNames []string
+	for _, group := range groups {
+		groupNames = append(groupNames, *group.GetDisplayName())
+	}
+	slog.Debug(fmt.Sprintf("Got groups: %s", strings.Join(groupNames, ", ")))
+
 	return groups, nil
 }
 
@@ -224,6 +229,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	endpoints map[string]struct{},
 	currentAuthStep int,
 ) ([]string, error) {
+	slog.Debug(fmt.Sprintf("In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep))
 	var offeredModes []string
 	switch sessionMode {
 	case "passwd":
@@ -246,6 +252,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 			offeredModes = []string{"newpassword"}
 		}
 	}
+	slog.Debug(fmt.Sprintf("Offered modes: %q", offeredModes))
 
 	for _, mode := range offeredModes {
 		if _, ok := supportedAuthModes[mode]; !ok {
