@@ -17,6 +17,7 @@ import (
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
@@ -230,20 +231,22 @@ func (p Provider) CurrentAuthenticationModesOffered(
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}
-		offeredModes = []string{"password"}
+		offeredModes = []string{authmodes.PasswordID}
 		if currentAuthStep > 0 {
-			offeredModes = []string{"newpassword"}
+			offeredModes = []string{authmodes.NewPasswordID}
 		}
 
 	default: // auth mode
-		if _, ok := endpoints["device_auth"]; ok && providerReachable {
-			offeredModes = []string{"device_auth"}
+		if _, ok := endpoints[authmodes.DeviceQrID]; ok && providerReachable {
+			offeredModes = []string{authmodes.DeviceQrID}
+		} else if _, ok := endpoints[authmodes.DeviceID]; ok && providerReachable {
+			offeredModes = []string{authmodes.DeviceID}
 		}
 		if tokenExists {
-			offeredModes = append([]string{"password"}, offeredModes...)
+			offeredModes = append([]string{authmodes.PasswordID}, offeredModes...)
 		}
 		if currentAuthStep > 0 {
-			offeredModes = []string{"newpassword"}
+			offeredModes = []string{authmodes.NewPasswordID}
 		}
 	}
 
