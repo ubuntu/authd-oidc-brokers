@@ -320,7 +320,15 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 	case "device_auth":
 		ctx, cancel := context.WithTimeout(context.Background(), maxRequestDuration)
 		defer cancel()
-		response, err := session.authCfg.oauth.DeviceAuth(ctx)
+
+		var opt oauth2.AuthCodeOption
+
+		if secret := session.authCfg.oauth.ClientSecret; secret != "" {
+			opt = oauth2.SetAuthURLParam("client_secret", secret)
+		}
+
+		response, err := session.authCfg.oauth.DeviceAuth(ctx, opt)
+
 		if err != nil {
 			return nil, fmt.Errorf("could not generate QR code layout: %v", err)
 		}
