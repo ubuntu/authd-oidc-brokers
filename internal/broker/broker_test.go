@@ -148,7 +148,7 @@ var supportedUILayouts = map[string]map[string]string{
 
 	"newpassword": {
 		"type":  "newpassword",
-		"entry": "optional:chars_password",
+		"entry": "required:chars_password",
 	},
 	"newpassword-without-entry": {
 		"type": "newpassword",

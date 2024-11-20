@@ -280,7 +280,9 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
 	supportedModes = make(map[string]string)
 	for _, layout := range supportedUILayouts {
-		supportedEntries := strings.Split(strings.TrimPrefix(layout["entry"], "optional:"), ",")
+		entry := strings.TrimPrefix(layout["entry"], "optional:")
+		entry = strings.TrimPrefix(entry, "required:")
+		supportedEntries := strings.Split(entry, ",")
 		switch layout["type"] {
 		case "qrcode":
 			if !strings.Contains(layout["wait"], "true") {
