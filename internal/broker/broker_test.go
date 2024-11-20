@@ -20,6 +20,8 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/brokers/layouts"
+	"github.com/ubuntu/authd/brokers/layouts/entries"
 	"gopkg.in/yaml.v3"
 )
 
@@ -122,36 +124,36 @@ func TestNewSession(t *testing.T) {
 
 var supportedUILayouts = map[string]map[string]string{
 	"form": {
-		"type":  "form",
-		"entry": "optional:chars_password",
+		layouts.Type:  layouts.Form,
+		layouts.Entry: layouts.OptionalItems(entries.CharsPassword),
 	},
 	"form-without-entry": {
-		"type": "form",
+		layouts.Type: layouts.Form,
 	},
 
 	"qrcode": {
-		"type": "qrcode",
-		"wait": "true",
+		layouts.Type: layouts.QrCode,
+		layouts.Wait: layouts.True,
 	},
 	"qrcode-without-wait": {
-		"type": "qrcode",
+		layouts.Type: layouts.QrCode,
 	},
 	"qrcode-without-qrcode": {
-		"type":           "qrcode",
-		"renders_qrcode": "false",
-		"wait":           "true",
+		layouts.Type:          layouts.QrCode,
+		layouts.RendersQrCode: layouts.False,
+		layouts.Wait:          layouts.True,
 	},
 	"qrcode-without-wait-and-qrcode": {
-		"type":           "qrcode",
-		"renders_qrcode": "false",
+		layouts.Type:          layouts.QrCode,
+		layouts.RendersQrCode: layouts.False,
 	},
 
 	"newpassword": {
-		"type":  "newpassword",
-		"entry": "required:chars_password",
+		layouts.Type:  layouts.NewPassword,
+		layouts.Entry: layouts.RequiredItems(entries.CharsPassword),
 	},
 	"newpassword-without-entry": {
-		"type": "newpassword",
+		layouts.Type: layouts.NewPassword,
 	},
 }
 

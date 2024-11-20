@@ -27,6 +27,8 @@ import (
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/brokers/layouts"
+	"github.com/ubuntu/authd/brokers/layouts/entries"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
@@ -260,8 +262,8 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	for _, id := range availableModes {
 		authModes = append(authModes, map[string]string{
-			"id":    id,
-			"label": supportedAuthModes[id],
+			layouts.ID:    id,
+			layouts.Label: supportedAuthModes[id],
 		})
 	}
 
@@ -280,27 +282,29 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
 	supportedModes = make(map[string]string)
 	for _, layout := range supportedUILayouts {
-		entry := strings.TrimPrefix(layout["entry"], "optional:")
-		entry = strings.TrimPrefix(entry, "required:")
-		supportedEntries := strings.Split(entry, ",")
-		switch layout["type"] {
-		case "qrcode":
-			if !strings.Contains(layout["wait"], "true") {
+		kind, supportedEntries := layouts.ParseItems(layout[layouts.Entry])
+		if kind != layouts.Optional && kind != layouts.Required {
+			supportedEntries = nil
+		}
+
+		switch layout[layouts.Type] {
+		case layouts.QrCode:
+			if !strings.Contains(layout[layouts.Wait], layouts.True) {
 				continue
 			}
 			deviceAuthID := authmodes.DeviceQr
-			if layout["renders_qrcode"] == "false" {
+			if layout[layouts.RendersQrCode] == layouts.False {
 				deviceAuthID = authmodes.Device
 			}
 			supportedModes[deviceAuthID] = "Device Authentication"
 
-		case "form":
-			if slices.Contains(supportedEntries, "chars_password") {
+		case layouts.Form:
+			if slices.Contains(supportedEntries, entries.CharsPassword) {
 				supportedModes[authmodes.Password] = "Local Password Authentication"
 			}
 
-		case "newpassword":
-			if slices.Contains(supportedEntries, "chars_password") {
+		case layouts.NewPassword:
+			if slices.Contains(supportedEntries, entries.CharsPassword) {
 				supportedModes[authmodes.NewPassword] = "Define your local password"
 			}
 		}
@@ -385,19 +389,19 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		}
 
 		uiLayout = map[string]string{
-			"type":    "qrcode",
-			"label":   label,
-			"wait":    "true",
-			"button":  "Request new login code",
-			"content": response.VerificationURI,
-			"code":    response.UserCode,
+			layouts.Type:    layouts.QrCode,
+			layouts.Label:   label,
+			layouts.Wait:    layouts.True,
+			layouts.Button:  "Request new login code",
+			layouts.Content: response.VerificationURI,
+			layouts.Code:    response.UserCode,
 		}
 
 	case authmodes.Password:
 		uiLayout = map[string]string{
-			"type":  "form",
-			"label": "Enter your local password",
-			"entry": "chars_password",
+			layouts.Type:  layouts.Form,
+			layouts.Label: "Enter your local password",
+			layouts.Entry: entries.CharsPassword,
 		}
 
 	case authmodes.NewPassword:
@@ -407,9 +411,9 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		}
 
 		uiLayout = map[string]string{
-			"type":  "newpassword",
-			"label": label,
-			"entry": "chars_password",
+			layouts.Type:  layouts.NewPassword,
+			layouts.Label: label,
+			layouts.Entry: entries.CharsPassword,
 		}
 	}
 
