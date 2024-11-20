@@ -220,7 +220,11 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		return nil, err
 	}
 
-	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
+	uiLayouts, err := layouts.UIsFromList(supportedUILayouts)
+	if err != nil {
+		return nil, err
+	}
+	supportedAuthModes := b.supportedAuthModesFromLayout(uiLayouts)
 
 	log.Debugf(context.Background(), "Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts)
 	log.Debugf(context.Background(), "Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes)
@@ -280,21 +284,21 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	return authModes, nil
 }
 
-func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
+func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []layouts.UILayout) (supportedModes map[string]string) {
 	supportedModes = make(map[string]string)
 	for _, layout := range supportedUILayouts {
-		kind, supportedEntries := layouts.ParseItems(layout[layouts.Entry])
+		kind, supportedEntries := layouts.ParseItems(layout.GetEntry())
 		if kind != layouts.Optional && kind != layouts.Required {
 			supportedEntries = nil
 		}
 
-		switch layout[layouts.Type] {
+		switch layout.Type {
 		case layouts.QrCode:
-			if !strings.Contains(layout[layouts.Wait], layouts.True) {
+			if !strings.Contains(layout.GetWait(), layouts.True) {
 				continue
 			}
 			deviceAuthID := authmodes.DeviceQr
-			if layout[layouts.RendersQrCode] == layouts.False {
+			if rc := layout.RendersQrcode; rc != nil && !*rc {
 				deviceAuthID = authmodes.Device
 			}
 			supportedModes[deviceAuthID] = "Device Authentication"
