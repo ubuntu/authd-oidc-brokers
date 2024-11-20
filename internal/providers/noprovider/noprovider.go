@@ -42,7 +42,7 @@ func (p NoProvider) AuthOptions() []oauth2.AuthCodeOption {
 // CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
 func (p NoProvider) CurrentAuthenticationModesOffered(
 	sessionMode string,
-	supportedAuthModes map[string]string,
+	supportedAuthModes map[string]auth.Mode,
 	tokenExists bool,
 	providerReachable bool,
 	endpoints map[string]struct{},

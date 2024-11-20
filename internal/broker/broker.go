@@ -267,7 +267,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	var authModes []auth.Mode
 	for _, id := range availableModes {
-		authModes = append(authModes, auth.NewMode(id, supportedAuthModes[id]))
+		authModes = append(authModes, supportedAuthModes[id])
 	}
 
 	if len(authModes) == 0 {
@@ -282,8 +282,8 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	return auth.NewModeMaps(authModes)
 }
 
-func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []layouts.UILayout) (supportedModes map[string]string) {
-	supportedModes = make(map[string]string)
+func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []layouts.UILayout) (supportedModes map[string]auth.Mode) {
+	supportedModes = make(map[string]auth.Mode)
 	for _, layout := range supportedUILayouts {
 		kind, supportedEntries := layouts.ParseItems(layout.GetEntry())
 		if kind != layouts.Optional && kind != layouts.Required {
@@ -299,16 +299,19 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []layouts.UILay
 			if rc := layout.RendersQrcode; rc != nil && !*rc {
 				deviceAuthID = authmodes.Device
 			}
-			supportedModes[deviceAuthID] = "Device Authentication"
+			supportedModes[deviceAuthID] = auth.NewMode(deviceAuthID,
+				"Device Authentication")
 
 		case layouts.Form:
 			if slices.Contains(supportedEntries, entries.CharsPassword) {
-				supportedModes[authmodes.Password] = "Local Password Authentication"
+				supportedModes[authmodes.Password] = auth.NewMode(authmodes.Password,
+					"Local Password Authentication")
 			}
 
 		case layouts.NewPassword:
 			if slices.Contains(supportedEntries, entries.CharsPassword) {
-				supportedModes[authmodes.NewPassword] = "Define your local password"
+				supportedModes[authmodes.NewPassword] = auth.NewMode(authmodes.NewPassword,
+					"Define your local password")
 			}
 		}
 	}
