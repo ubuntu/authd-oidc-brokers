@@ -993,11 +993,11 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 				require.NoError(t, err)
 				if slices.Contains(tc.wantAllowedUsers, u) {
-					require.Equal(t, broker.AuthGranted, access, "authentication failed")
+					require.Equal(t, auth.Granted, access, "authentication failed")
 					continue
 				}
 				if slices.Contains(tc.wantUnallowedUsers, u) {
-					require.Equal(t, broker.AuthDenied, access, "authentication failed")
+					require.Equal(t, auth.Denied, access, "authentication failed")
 					continue
 				}
 				t.Fatalf("user %s is not in the allowed or unallowed users list", u)
