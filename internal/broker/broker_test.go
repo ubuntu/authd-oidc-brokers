@@ -123,7 +123,7 @@ func TestNewSession(t *testing.T) {
 var supportedUILayouts = map[string]map[string]string{
 	"form": {
 		"type":  "form",
-		"entry": "chars_password",
+		"entry": "optional:chars_password",
 	},
 	"form-without-entry": {
 		"type": "form",
@@ -148,7 +148,7 @@ var supportedUILayouts = map[string]map[string]string{
 
 	"newpassword": {
 		"type":  "newpassword",
-		"entry": "chars_password",
+		"entry": "optional:chars_password",
 	},
 	"newpassword-without-entry": {
 		"type": "newpassword",
