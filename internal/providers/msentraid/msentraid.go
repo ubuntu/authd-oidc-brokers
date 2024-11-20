@@ -264,7 +264,9 @@ func getSecurityGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.G
 			groupNames = append(groupNames, *groupNamePtr)
 		}
 	}
-	log.Debugf(context.Background(), "Got groups: %s", strings.Join(groupNames, ", "))
+	if log.IsLevelEnabled(log.DebugLevel) {
+		log.Debugf(context.Background(), "Got groups: %s", strings.Join(groupNames, ", "))
+	}
 
 	return groups, nil
 }
@@ -291,7 +293,8 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	endpoints map[string]struct{},
 	currentAuthStep int,
 ) ([]string, error) {
-	log.Debugf(context.Background(), "In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
+	log.Debugf(context.Background(), "In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n",
+		sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
 	var offeredModes []string
 	switch sessionMode {
 	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
