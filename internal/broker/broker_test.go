@@ -123,37 +123,48 @@ func TestNewSession(t *testing.T) {
 	}
 }
 
+const (
+	formLayoutID                       = "form"
+	formWithoutEntryLayoutID           = "form-without-entry"
+	qrcodeLayoutID                     = "qrcode"
+	qrcodeWithoutWaitLayoutID          = "qrcode-without-wait"
+	qrcodeWithoutQrcodeLayoutID        = "qrcode-without-qrcode"
+	qrcodeWithoutWaitAndQrcodeLayoutID = "qrcode-without-wait-and-qrcode"
+	newPasswordLayoutID                = "newpassword"
+	newPasswordWithoutEntryLayoutID    = "newpassword-without-entry"
+)
+
 var supportedUILayouts = map[string]map[string]string{
-	"form": {
+	formLayoutID: {
 		layouts.Type:  layouts.Form,
 		layouts.Entry: layouts.OptionalItems(entries.CharsPassword),
 	},
-	"form-without-entry": {
+	formWithoutEntryLayoutID: {
 		layouts.Type: layouts.Form,
 	},
 
-	"qrcode": {
+	qrcodeLayoutID: {
 		layouts.Type: layouts.QrCode,
 		layouts.Wait: layouts.True,
 	},
-	"qrcode-without-wait": {
+	qrcodeWithoutWaitLayoutID: {
 		layouts.Type: layouts.QrCode,
 	},
-	"qrcode-without-qrcode": {
+	qrcodeWithoutQrcodeLayoutID: {
 		layouts.Type:          layouts.QrCode,
 		layouts.RendersQrCode: layouts.False,
 		layouts.Wait:          layouts.True,
 	},
-	"qrcode-without-wait-and-qrcode": {
+	qrcodeWithoutWaitAndQrcodeLayoutID: {
 		layouts.Type:          layouts.QrCode,
 		layouts.RendersQrCode: layouts.False,
 	},
 
-	"newpassword": {
+	newPasswordLayoutID: {
 		layouts.Type:  layouts.NewPassword,
 		layouts.Entry: layouts.RequiredItems(entries.CharsPassword),
 	},
-	"newpassword-without-entry": {
+	newPasswordWithoutEntryLayoutID: {
 		layouts.Type: layouts.NewPassword,
 	},
 }
@@ -191,10 +202,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 
 		// General errors
 		"Error_if_no_authentication_mode_is_supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
-		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
-		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
-		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
-		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
+		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{qrcodeWithoutWaitLayoutID}, wantErr: true},
+		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{qrcodeWithoutWaitAndQrcodeLayoutID}, wantErr: true},
+		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{newPasswordWithoutEntryLayoutID}, wantErr: true},
+		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{formWithoutEntryLayoutID}, wantErr: true},
 
 		// Change password session errors
 		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePasswordNew, wantErr: true},
@@ -243,7 +254,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 
 			if tc.supportedLayouts == nil {
-				tc.supportedLayouts = []string{"form", "qrcode", "newpassword"}
+				tc.supportedLayouts = []string{formLayoutID, qrcodeLayoutID, newPasswordLayoutID}
 			}
 			var layouts []map[string]string
 			for _, layout := range tc.supportedLayouts {
@@ -263,15 +274,15 @@ func TestGetAuthenticationModes(t *testing.T) {
 }
 
 var supportedLayouts = []map[string]string{
-	supportedUILayouts["form"],
-	supportedUILayouts["qrcode"],
-	supportedUILayouts["newpassword"],
+	supportedUILayouts[formLayoutID],
+	supportedUILayouts[qrcodeLayoutID],
+	supportedUILayouts[newPasswordLayoutID],
 }
 
 var supportedLayoutsWithoutQrCode = []map[string]string{
-	supportedUILayouts["form"],
-	supportedUILayouts["qrcode-without-qrcode"],
-	supportedUILayouts["newpassword"],
+	supportedUILayouts[formLayoutID],
+	supportedUILayouts[qrcodeWithoutQrcodeLayoutID],
+	supportedUILayouts[newPasswordLayoutID],
 }
 
 func TestSelectAuthenticationMode(t *testing.T) {
