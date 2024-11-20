@@ -20,6 +20,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/brokers/auth"
 	"github.com/ubuntu/authd/brokers/layouts"
 	"github.com/ubuntu/authd/brokers/layouts/entries"
 	"gopkg.in/yaml.v3"
@@ -111,7 +112,7 @@ func TestNewSession(t *testing.T) {
 				customHandlers: tc.customHandlers,
 			})
 
-			id, _, err := b.NewSession("test-user", "lang", sessionmode.Login)
+			id, _, err := b.NewSession("test-user", "lang", sessionmode.LoginNew)
 			require.NoError(t, err, "NewSession should not have returned an error")
 
 			gotOffline, err := b.IsOffline(id)
@@ -182,9 +183,9 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
 
 		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePassword, tokenExists: true},
-		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePassword, tokenExists: true, secondAuthStep: true},
-		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":                  {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true},
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePasswordNew, tokenExists: true},
+		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePasswordNew, tokenExists: true, secondAuthStep: true},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":                  {sessionMode: auth.SessionModeChangePassword, tokenExists: true},
 
 		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
 
@@ -196,14 +197,14 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
 
 		// Change password session errors
-		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePassword, wantErr: true},
+		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePasswordNew, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			if tc.sessionMode == "" {
-				tc.sessionMode = sessionmode.Login
+				tc.sessionMode = sessionmode.LoginNew
 			}
 
 			cfg := &brokerForTestConfig{}
@@ -335,9 +336,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 			b := newBrokerForTests(t, cfg)
 
-			sessionType := sessionmode.Login
+			sessionType := sessionmode.LoginNew
 			if tc.passwdSession {
-				sessionType = sessionmode.ChangePassword
+				sessionType = sessionmode.ChangePasswordNew
 			}
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
@@ -458,7 +459,7 @@ func TestIsAuthenticated(t *testing.T) {
 			useOldNameForSecretField: true,
 		},
 		"Authenticating_to_change_password_still_allowed_if_fetching_user_info_fails": {
-			sessionMode:      sessionmode.ChangePassword,
+			sessionMode:      sessionmode.ChangePasswordNew,
 			firstMode:        authmodes.Password,
 			token:            &tokenOptions{noUserInfo: true},
 			getUserInfoFails: true,
@@ -538,7 +539,7 @@ func TestIsAuthenticated(t *testing.T) {
 			t.Parallel()
 
 			if tc.sessionMode == "" {
-				tc.sessionMode = sessionmode.Login
+				tc.sessionMode = sessionmode.LoginNew
 			}
 
 			if tc.sessionOffline {
@@ -1060,7 +1061,7 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 			tc.token.issuer = defaultIssuerURL
 
-			sessionID, _, err := b.NewSession(tc.username, "lang", sessionmode.Login)
+			sessionID, _, err := b.NewSession(tc.username, "lang", sessionmode.LoginNew)
 			require.NoError(t, err, "Setup: Failed to create session for the tests")
 
 			cachedInfo := generateCachedInfo(t, tc.token)

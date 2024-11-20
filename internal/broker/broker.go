@@ -27,6 +27,7 @@ import (
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/brokers/auth"
 	"github.com/ubuntu/authd/brokers/layouts"
 	"github.com/ubuntu/authd/brokers/layouts/entries"
 	"github.com/ubuntu/authd/log"
@@ -406,7 +407,8 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 
 	case authmodes.NewPassword:
 		label := "Create a local password"
-		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
+		if session.mode == sessionmode.ChangePasswordNew ||
+			session.mode == auth.SessionModeChangePassword {
 			label = "Update your local password"
 		}
 
@@ -593,7 +595,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
 		// want the method call to return an error if refreshing the token or user info fails).
-		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
+		if session.mode == sessionmode.ChangePasswordNew ||
+			session.mode == auth.SessionModeChangePassword {
 			session.authInfo["auth_info"] = authInfo
 			return AuthNext, nil
 		}

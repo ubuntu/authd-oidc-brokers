@@ -21,6 +21,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd/brokers/auth"
 	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )
@@ -297,7 +298,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 		sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
 	var offeredModes []string
 	switch sessionMode {
-	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
+	case auth.SessionModeChangePassword, sessionmode.ChangePasswordNew:
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}
