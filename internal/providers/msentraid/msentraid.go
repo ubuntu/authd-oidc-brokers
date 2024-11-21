@@ -17,10 +17,10 @@ import (
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/noprovider"
 	"golang.org/x/oauth2"
 )
 
@@ -32,6 +32,7 @@ const localGroupPrefix = "linux-"
 
 // Provider is the Microsoft Entra ID provider implementation.
 type Provider struct {
+	noprovider.NoProvider
 	expectedScopes []string
 }
 
@@ -45,11 +46,6 @@ func New() Provider {
 // AdditionalScopes returns the generic scopes required by the EntraID provider.
 func (p Provider) AdditionalScopes() []string {
 	return []string{oidc.ScopeOfflineAccess, "GroupMember.Read.All", "User.Read"}
-}
-
-// AuthOptions returns the generic auth options required by the EntraID provider.
-func (p Provider) AuthOptions() []oauth2.AuthCodeOption {
-	return []oauth2.AuthCodeOption{}
 }
 
 // CheckTokenScopes checks if the token has the required scopes.
@@ -217,56 +213,11 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 			groupNames = append(groupNames, *groupNamePtr)
 		}
 	}
-	slog.Debug(fmt.Sprintf("Got groups: %s", strings.Join(groupNames, ", ")))
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		slog.Debug(fmt.Sprintf("Got groups: %s", strings.Join(groupNames, ", ")))
+	}
 
 	return groups, nil
-}
-
-// CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
-//
-// Token validity is not considered, only the presence of a token.
-func (p Provider) CurrentAuthenticationModesOffered(
-	sessionMode string,
-	supportedAuthModes map[string]string,
-	tokenExists bool,
-	providerReachable bool,
-	endpoints map[string]struct{},
-	currentAuthStep int,
-) ([]string, error) {
-	slog.Debug(fmt.Sprintf("In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep))
-	var offeredModes []string
-	switch sessionMode {
-	case "passwd":
-		if !tokenExists {
-			return nil, errors.New("user has no cached token")
-		}
-		offeredModes = []string{authmodes.Password}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-
-	default: // auth mode
-		if _, ok := endpoints[authmodes.DeviceQr]; ok && providerReachable {
-			offeredModes = []string{authmodes.DeviceQr}
-		} else if _, ok := endpoints[authmodes.Device]; ok && providerReachable {
-			offeredModes = []string{authmodes.Device}
-		}
-		if tokenExists {
-			offeredModes = append([]string{authmodes.Password}, offeredModes...)
-		}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-	}
-	slog.Debug(fmt.Sprintf("Offered modes: %q", offeredModes))
-
-	for _, mode := range offeredModes {
-		if _, ok := supportedAuthModes[mode]; !ok {
-			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
-		}
-	}
-
-	return offeredModes, nil
 }
 
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.

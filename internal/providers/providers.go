@@ -6,6 +6,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd/brokers/auth"
 	"golang.org/x/oauth2"
 )
 
@@ -16,7 +17,7 @@ type Provider interface {
 	CheckTokenScopes(token *oauth2.Token) error
 	CurrentAuthenticationModesOffered(
 		sessionMode string,
-		supportedAuthModes map[string]string,
+		supportedAuthModes map[string]*auth.Mode,
 		tokenExists bool,
 		providerReachable bool,
 		endpoints map[string]struct{},

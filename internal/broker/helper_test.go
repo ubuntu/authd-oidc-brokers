@@ -17,6 +17,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/brokers/auth"
 	"golang.org/x/oauth2"
 )
 
@@ -92,7 +93,7 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 		username = "test-user@email.com"
 	}
 	if mode == "" {
-		mode = "auth"
+		mode = auth.SessionModeAuth
 	}
 
 	id, key, err := b.NewSession(username, "some lang", mode)

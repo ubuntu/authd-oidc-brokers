@@ -27,6 +27,9 @@ import (
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/brokers/auth"
+	"github.com/ubuntu/authd/brokers/layouts"
+	"github.com/ubuntu/authd/brokers/layouts/entries"
 	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
 )
@@ -216,16 +219,22 @@ func (b *Broker) connectToOIDCServer(ctx context.Context) (*oidc.Provider, error
 }
 
 // GetAuthenticationModes returns the authentication modes available for the user.
-func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authModes []map[string]string, err error) {
+func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) ([]map[string]string, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
+	uiLayouts, err := layouts.UIsFromList(supportedUILayouts)
+	if err != nil {
+		return nil, err
+	}
+	supportedAuthModes := b.supportedAuthModesFromLayout(uiLayouts)
 
-	slog.Debug(fmt.Sprintf("Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts))
-	slog.Debug(fmt.Sprintf("Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes))
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		slog.Debug(fmt.Sprintf("Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts))
+		slog.Debug(fmt.Sprintf("Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes))
+	}
 
 	// Checks if the token exists in the cache.
 	tokenExists, err := fileutils.FileExists(session.tokenPath)
@@ -263,11 +272,9 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		return nil, err
 	}
 
+	var authModes []*auth.Mode
 	for _, id := range availableModes {
-		authModes = append(authModes, map[string]string{
-			"id":    id,
-			"label": supportedAuthModes[id],
-		})
+		authModes = append(authModes, supportedAuthModes[id])
 	}
 
 	if len(authModes) == 0 {
@@ -279,32 +286,39 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		return nil, err
 	}
 
-	return authModes, nil
+	return auth.NewModeMaps(authModes)
 }
 
-func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
-	supportedModes = make(map[string]string)
+func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []*layouts.UILayout) (supportedModes map[string]*auth.Mode) {
+	supportedModes = make(map[string]*auth.Mode)
 	for _, layout := range supportedUILayouts {
-		supportedEntries := strings.Split(strings.TrimPrefix(layout["entry"], "optional:"), ",")
-		switch layout["type"] {
-		case "qrcode":
-			if !strings.Contains(layout["wait"], "true") {
+		kind, supportedEntries := layouts.ParseItems(layout.GetEntry())
+		if kind != layouts.Optional && kind != layouts.Required {
+			supportedEntries = nil
+		}
+
+		switch layout.Type {
+		case layouts.QrCode:
+			if !strings.Contains(layout.GetWait(), layouts.True) {
 				continue
 			}
 			deviceAuthID := authmodes.DeviceQr
-			if layout["renders_qrcode"] == "false" {
+			if rc := layout.RendersQrcode; rc != nil && !*rc {
 				deviceAuthID = authmodes.Device
 			}
-			supportedModes[deviceAuthID] = "Device Authentication"
+			supportedModes[deviceAuthID] = auth.NewMode(deviceAuthID,
+				"Device Authentication")
 
-		case "form":
-			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes[authmodes.Password] = "Local Password Authentication"
+		case layouts.Form:
+			if slices.Contains(supportedEntries, entries.CharsPassword) {
+				supportedModes[authmodes.Password] = auth.NewMode(authmodes.Password,
+					"Local Password Authentication")
 			}
 
-		case "newpassword":
-			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes[authmodes.NewPassword] = "Define your local password"
+		case layouts.NewPassword:
+			if slices.Contains(supportedEntries, entries.CharsPassword) {
+				supportedModes[authmodes.NewPassword] = auth.NewMode(authmodes.NewPassword,
+					"Define your local password")
 			}
 		}
 	}
@@ -313,14 +327,14 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]st
 }
 
 // SelectAuthenticationMode selects the authentication mode for the user.
-func (b *Broker) SelectAuthenticationMode(sessionID, authModeID string) (uiLayoutInfo map[string]string, err error) {
+func (b *Broker) SelectAuthenticationMode(sessionID, authModeID string) (map[string]string, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return nil, err
 	}
 
 	// populate UI options based on selected authentication mode
-	uiLayoutInfo, err = b.generateUILayout(&session, authModeID)
+	uiLayout, err := b.generateUILayout(&session, authModeID)
 	if err != nil {
 		return nil, err
 	}
@@ -336,15 +350,14 @@ func (b *Broker) SelectAuthenticationMode(sessionID, authModeID string) (uiLayou
 		return nil, err
 	}
 
-	return uiLayoutInfo, nil
+	return uiLayout.ToMap()
 }
 
-func (b *Broker) generateUILayout(session *session, authModeID string) (map[string]string, error) {
+func (b *Broker) generateUILayout(session *session, authModeID string) (*layouts.UILayout, error) {
 	if !slices.Contains(session.authModes, authModeID) {
 		return nil, fmt.Errorf("selected authentication mode %q does not exist", authModeID)
 	}
 
-	var uiLayout map[string]string
 	switch authModeID {
 	case authmodes.Device, authmodes.DeviceQr:
 		ctx, cancel := context.WithTimeout(context.Background(), maxRequestDuration)
@@ -379,55 +392,55 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			)
 		}
 
-		uiLayout = map[string]string{
-			"type":    "qrcode",
-			"label":   label,
-			"wait":    "true",
-			"button":  "Request new login code",
-			"content": response.VerificationURI,
-			"code":    response.UserCode,
-		}
+		return layouts.NewUI(
+			layouts.UIQrCode,
+			layouts.WithLabel(label),
+			layouts.WithWaitBool(true),
+			layouts.WithButton("Request new login code"),
+			layouts.WithContent(response.VerificationURI),
+			layouts.WithCode(response.UserCode),
+		), nil
 
 	case authmodes.Password:
-		uiLayout = map[string]string{
-			"type":  "form",
-			"label": "Enter your local password",
-			"entry": "chars_password",
-		}
+		return layouts.NewUI(
+			layouts.UIForm,
+			layouts.WithLabel("Enter your local password"),
+			layouts.WithEntry(entries.CharsPassword),
+		), nil
 
 	case authmodes.NewPassword:
 		label := "Create a local password"
-		if session.mode == "passwd" {
+		if session.mode == auth.SessionModePasswd {
 			label = "Update your local password"
 		}
 
-		uiLayout = map[string]string{
-			"type":  "newpassword",
-			"label": label,
-			"entry": "chars_password",
-		}
+		return layouts.NewUI(
+			layouts.UINewPassword,
+			layouts.WithLabel(label),
+			layouts.WithEntry(entries.CharsPassword),
+		), nil
 	}
 
-	return uiLayout, nil
+	return nil, nil
 }
 
 // IsAuthenticated evaluates the provided authenticationData and returns the authentication status for the user.
 func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, string, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return AuthDenied, "{}", err
+		return auth.Denied, "{}", err
 	}
 
 	var authData map[string]string
 	if authenticationData != "" {
 		if err := json.Unmarshal([]byte(authenticationData), &authData); err != nil {
-			return AuthDenied, "{}", fmt.Errorf("authentication data is not a valid json value: %v", err)
+			return auth.Denied, "{}", fmt.Errorf("authentication data is not a valid json value: %v", err)
 		}
 	}
 
 	ctx, err := b.startAuthenticate(sessionID)
 	if err != nil {
-		return AuthDenied, "{}", err
+		return auth.Denied, "{}", err
 	}
 
 	// Cleans up the IsAuthenticated context when the call is done.
@@ -446,28 +459,28 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	case <-ctx.Done():
 		// We can ignore the error here since the message is constant.
 		msg, _ := json.Marshal(errorMessage{Message: "authentication request cancelled"})
-		return AuthCancelled, string(msg), ctx.Err()
+		return auth.Cancelled, string(msg), ctx.Err()
 	}
 
 	switch access {
-	case AuthRetry:
+	case auth.Retry:
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
-			access = AuthDenied
+			access = auth.Denied
 			iadResponse = errorMessage{Message: "maximum number of attempts reached"}
 		}
 
-	case AuthNext:
+	case auth.Next:
 		session.currentAuthStep++
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
-		return AuthDenied, "{}", err
+		return auth.Denied, "{}", err
 	}
 
 	encoded, err := json.Marshal(iadResponse)
 	if err != nil {
-		return AuthDenied, "{}", fmt.Errorf("could not parse data to JSON: %v", err)
+		return auth.Denied, "{}", fmt.Errorf("could not parse data to JSON: %v", err)
 	}
 
 	data := string(encoded)
@@ -484,7 +497,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	challenge, err := decodeRawChallenge(b.privateKey, authData["challenge"])
 	if err != nil {
 		slog.Error(err.Error())
-		return AuthRetry, errorMessage{Message: "could not decode challenge"}
+		return auth.Retry, errorMessage{Message: "could not decode challenge"}
 	}
 
 	var authInfo token.AuthCachedInfo
@@ -493,7 +506,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
 			slog.Error("could not get device auth response")
-			return AuthDenied, errorMessage{Message: "could not get required response"}
+			return auth.Denied, errorMessage{Message: "could not get required response"}
 		}
 
 		if response.Expiry.IsZero() {
@@ -504,7 +517,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
 			slog.Error(err.Error())
-			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
+			return auth.Retry, errorMessage{Message: "could not authenticate user remotely"}
 		}
 
 		if err = b.provider.CheckTokenScopes(t); err != nil {
@@ -514,53 +527,53 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
 			slog.Error("could not get ID token")
-			return AuthDenied, errorMessage{Message: "could not get ID token"}
+			return auth.Denied, errorMessage{Message: "could not get ID token"}
 		}
 
 		authInfo = token.NewAuthCachedInfo(t, rawIDToken, b.provider)
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			slog.Error(err.Error())
-			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+			return auth.Denied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 
 		session.authInfo["auth_info"] = authInfo
-		return AuthNext, nil
+		return auth.Next, nil
 
 	case authmodes.Password:
 		useOldEncryptedToken, err := token.UseOldEncryptedToken(session.tokenPath, session.passwordPath, session.oldEncryptedTokenPath)
 		if err != nil {
 			slog.Error(err.Error())
-			return AuthDenied, errorMessage{Message: "could not check password file"}
+			return auth.Denied, errorMessage{Message: "could not check password file"}
 		}
 
 		if useOldEncryptedToken {
 			authInfo, err = token.LoadOldEncryptedAuthInfo(session.oldEncryptedTokenPath, challenge)
 			if err != nil {
 				slog.Error(err.Error())
-				return AuthDenied, errorMessage{Message: "could not load encrypted token"}
+				return auth.Denied, errorMessage{Message: "could not load encrypted token"}
 			}
 
 			// We were able to decrypt the old token with the password, so we can now hash and store the password in the
 			// new format.
 			if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
 				slog.Error(err.Error())
-				return AuthDenied, errorMessage{Message: "could not store password"}
+				return auth.Denied, errorMessage{Message: "could not store password"}
 			}
 		} else {
 			ok, err := password.CheckPassword(challenge, session.passwordPath)
 			if err != nil {
 				slog.Error(err.Error())
-				return AuthDenied, errorMessage{Message: "could not check password"}
+				return auth.Denied, errorMessage{Message: "could not check password"}
 			}
 			if !ok {
-				return AuthRetry, errorMessage{Message: "incorrect password"}
+				return auth.Retry, errorMessage{Message: "incorrect password"}
 			}
 
 			authInfo, err = token.LoadAuthInfo(session.tokenPath)
 			if err != nil {
 				slog.Error(err.Error())
-				return AuthDenied, errorMessage{Message: "could not load stored token"}
+				return auth.Denied, errorMessage{Message: "could not load stored token"}
 			}
 		}
 
@@ -569,7 +582,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
 			if err != nil {
 				slog.Error(err.Error())
-				return AuthDenied, errorMessage{Message: "could not refresh token"}
+				return auth.Denied, errorMessage{Message: "could not refresh token"}
 			}
 		}
 
@@ -578,7 +591,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
 			slog.Error(err.Error())
-			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+			return auth.Denied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 		if err != nil {
 			// We couldn't fetch the user info, but we have a valid cached one.
@@ -587,14 +600,14 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			authInfo.UserInfo = userInfo
 		}
 
-		if session.mode == "passwd" {
+		if session.mode == auth.SessionModePasswd {
 			session.authInfo["auth_info"] = authInfo
-			return AuthNext, nil
+			return auth.Next, nil
 		}
 
 	case authmodes.NewPassword:
 		if challenge == "" {
-			return AuthRetry, errorMessage{Message: "empty challenge"}
+			return auth.Retry, errorMessage{Message: "empty challenge"}
 		}
 
 		var ok bool
@@ -602,29 +615,29 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		authInfo, ok = session.authInfo["auth_info"].(token.AuthCachedInfo)
 		if !ok {
 			slog.Error("could not get required information")
-			return AuthDenied, errorMessage{Message: "could not get required information"}
+			return auth.Denied, errorMessage{Message: "could not get required information"}
 		}
 
 		if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
 			slog.Error(err.Error())
-			return AuthDenied, errorMessage{Message: "could not store password"}
+			return auth.Denied, errorMessage{Message: "could not store password"}
 		}
 	}
 
 	if session.isOffline {
-		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+		return auth.Granted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		slog.Error(err.Error())
-		return AuthDenied, errorMessage{Message: "could not cache user info"}
+		return auth.Denied, errorMessage{Message: "could not cache user info"}
 	}
 
 	// At this point we successfully stored the hashed password and a new token, so we can now safely remove any old
 	// encrypted token.
 	token.CleanupOldEncryptedToken(session.oldEncryptedTokenPath)
 
-	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+	return auth.Granted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
