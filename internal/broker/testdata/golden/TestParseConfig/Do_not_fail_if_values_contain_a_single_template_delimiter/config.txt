@@ -1,5 +1,7 @@
 clientID=<CLIENT_ID
 clientSecret=
 issuerURL=https://ISSUER_URL>
+allowedUsers=map[OWNER:true]
+owner=<nil>
 homeBaseDir=
 allowedSSHSuffixes=[]

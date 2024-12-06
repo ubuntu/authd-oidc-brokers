@@ -46,9 +46,12 @@ type Config struct {
 }
 
 type userConfig struct {
-	clientID           string
-	clientSecret       string
-	issuerURL          string
+	clientID     string
+	clientSecret string
+	issuerURL    string
+
+	allowedUsers       map[string]bool
+	owner              string
 	homeBaseDir        string
 	allowedSSHSuffixes []string
 }
