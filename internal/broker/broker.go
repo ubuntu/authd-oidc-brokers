@@ -654,7 +654,10 @@ func (b *Broker) userNameIsAllowed(userName string) bool {
 	if b.cfg.userConfig.OwnerUserAllowed() && b.cfg.userConfig.OwnerIsUnset() {
 		if b.cfg.ConfigFile != "" {
 			// TODO(nsklikas): What should we do in case of error?
-			b.cfg.PersistOwner(b.cfg.ConfigFile, userName)
+			err := b.cfg.PersistOwner(b.cfg.ConfigFile, userName)
+			if err != nil {
+				slog.Warn(fmt.Sprintf("Failed to auto-register the owner: %f", err))
+			}
 		}
 		b.cfg.SetOwner(userName)
 	}

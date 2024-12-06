@@ -377,7 +377,8 @@ func TestPersistOwner(t *testing.T) {
 	require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
 	cfg := userConfig{}
-	cfg.PersistOwner(confPath, userName)
+	err = cfg.PersistOwner(confPath, userName)
+	require.NoError(t, err)
 
 	f, err := os.Open(filepath.Join(dropInDir, "20-owner-autoregistration.conf"))
 	require.NoError(t, err, "failed to open 20-owner-autoregistration.conf")
