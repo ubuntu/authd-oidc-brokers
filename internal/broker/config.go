@@ -41,6 +41,18 @@ const (
 	OwnerUserKey = "OWNER"
 )
 
+type userConfig struct {
+	clientID     string
+	clientSecret string
+	issuerURL    string
+
+	allowedUsers map[string]bool
+	// we use a pointer for the owner to differentiate between unset and an empty value
+	owner              *string
+	homeBaseDir        string
+	allowedSSHSuffixes []string
+}
+
 func getDropInFiles(cfgPath string) ([]any, error) {
 	// Check if a .d directory exists and return the paths to the files in it.
 	dropInDir := cfgPath + ".d"
@@ -158,8 +170,11 @@ func (uc *userConfig) OwnerIsUnset() bool {
 	return uc.owner == nil
 }
 
+func (uc *userConfig) SetOwner(owner string) {
+	uc.owner = &owner
+}
+
 func (uc *userConfig) PersistOwner(cfgPath, userName string) error {
-	uc.owner = &userName
 	p := filepath.Join(getDropInDir(cfgPath), ownerRegistrationConfigPath)
 
 	templateName := strings.SplitN(ownerRegistrationConfigTemplate, "/", 2)[1]

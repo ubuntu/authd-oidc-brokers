@@ -23,6 +23,8 @@ import (
 type brokerForTestConfig struct {
 	broker.Config
 	issuerURL          string
+	allowedUsers       map[string]bool
+	owner              *string
 	homeBaseDir        string
 	allowedSSHSuffixes []string
 
@@ -48,6 +50,14 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.allowedSSHSuffixes != nil {
 		cfg.SetAllowedSSHSuffixes(cfg.allowedSSHSuffixes)
+	}
+	if cfg.allowedUsers == nil {
+		cfg.SetAllowedUsers(map[string]bool{"OWNER": true})
+	} else {
+		cfg.SetAllowedUsers(cfg.allowedUsers)
+	}
+	if cfg.owner != nil {
+		cfg.SetOwner(*cfg.owner)
 	}
 
 	provider := &testutils.MockProvider{
