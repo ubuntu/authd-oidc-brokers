@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -536,8 +537,10 @@ func TestIsAuthenticated(t *testing.T) {
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
 			cfg := &brokerForTestConfig{
-				Config:           broker.Config{DataDir: dataDir},
-				getUserInfoFails: tc.getUserInfoFails,
+				Config:                broker.Config{DataDir: dataDir},
+				getUserInfoFails:      tc.getUserInfoFails,
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
@@ -729,6 +732,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
 				Config:          broker.Config{DataDir: dataDir},
+				allUsersAllowed: true,
 				firstCallDelay:  tc.firstCallDelay,
 				secondCallDelay: tc.secondCallDelay,
 				tokenHandlerOptions: &testutils.TokenHandlerOptions{
@@ -822,6 +826,147 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 					t.Logf("Failed to rename issuer data directory: %v", err)
 				}
 			}
+			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
+
+func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		allowedUsers          map[string]struct{}
+		owner                 string
+		ownerAllowed          bool
+		allUsersAllowed       bool
+		firstUserBecomesOwner bool
+
+		allowedUsernames   []string
+		unallowedUsernames []string
+	}{
+		"All_users_are_allowed": {
+			allUsersAllowed:  true,
+			allowedUsernames: []string{"u1", "u2"},
+		},
+		"Only_owner_allowed": {
+			ownerAllowed:       true,
+			owner:              "machine_owner",
+			allowedUsernames:   []string{"machine_owner"},
+			unallowedUsernames: []string{"u1", "u2"},
+		},
+		"No_users_allowed": {
+			ownerAllowed:       true,
+			owner:              "",
+			unallowedUsernames: []string{"u1", "u2", "machine_owner", "u3"},
+		},
+		"Only_unset_owner_allowed": {
+			ownerAllowed:          true,
+			firstUserBecomesOwner: true,
+			allowedUsernames:      []string{"random_user"},
+			unallowedUsernames:    []string{"u1", "u2"},
+		},
+		"Specific_users_allowed": {
+			allowedUsers:       map[string]struct{}{"u1": {}, "u2": {}},
+			allowedUsernames:   []string{"u1", "u2"},
+			unallowedUsernames: []string{"u3"},
+		},
+		"Specific_users_and_owner": {
+			allowedUsers:       map[string]struct{}{"u1": {}, "u2": {}},
+			ownerAllowed:       true,
+			owner:              "machine_owner",
+			allowedUsernames:   []string{"u1", "u2", "machine_owner"},
+			unallowedUsernames: []string{"u3"},
+		},
+		"Owner_is_disabled_even_when_registered": {
+			allowedUsers:       map[string]struct{}{"u1": {}, "u2": {}},
+			owner:              "machine_owner",
+			allowedUsernames:   []string{"u1", "u2"},
+			unallowedUsernames: []string{"machine_owner", "u3"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			outDir := t.TempDir()
+			dataDir := filepath.Join(outDir, "data")
+			err := os.Mkdir(dataDir, 0700)
+			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
+			var session string
+			var users []string
+
+			idTokenClaims := []map[string]interface{}{}
+			for _, uname := range tc.allowedUsernames {
+				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
+				users = append(users, uname)
+			}
+			for _, uname := range tc.unallowedUsernames {
+				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
+				users = append(users, uname)
+			}
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: dataDir},
+				allowedUsers:          tc.allowedUsers,
+				owner:                 tc.owner,
+				ownerAllowed:          tc.ownerAllowed,
+				allUsersAllowed:       tc.allUsersAllowed,
+				firstUserBecomesOwner: tc.firstUserBecomesOwner,
+				tokenHandlerOptions: &testutils.TokenHandlerOptions{
+					IDTokenClaims: idTokenClaims,
+				},
+			})
+
+			for _, u := range users {
+				sessionID, key := newSessionForTests(t, b, u, "")
+				session = sessionID
+				token := tokenOptions{username: u}
+				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
+				err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
+
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+
+				authData := `{"challenge":"` + encryptChallenge(t, "password", key) + `"}`
+
+				access, data, err := b.IsAuthenticated(sessionID, authData)
+				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
+				require.NoError(t, err)
+				if slices.Contains(tc.allowedUsernames, u) {
+					require.Equal(t, access, broker.AuthGranted, "authentication failed")
+				} else {
+					require.Equal(t, access, broker.AuthDenied, "authentication failed")
+				}
+
+				got := isAuthenticatedResponse{Access: access, Data: data, Err: fmt.Sprint(err)}
+				out, err := yaml.Marshal(got)
+				require.NoError(t, err, "Failed to marshal first response")
+
+				err = os.WriteFile(filepath.Join(outDir, u), out, 0600)
+				require.NoError(t, err, "Failed to write response")
+
+				// Ensure that the token content is generic to avoid golden file conflicts
+				if _, err := os.Stat(b.TokenPathForSession(sessionID)); err == nil {
+					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
+					require.NoError(t, err, "Teardown: Failed to write generic token file")
+				}
+				passwordPath := b.PasswordFilepathForSession(sessionID)
+				if _, err := os.Stat(passwordPath); err == nil {
+					err := os.WriteFile(passwordPath, []byte("Definitely a hashed password"), 0600)
+					require.NoError(t, err, "Teardown: Failed to write generic password file")
+				}
+			}
+
+			if session != "" {
+				issuerDataDir := filepath.Dir(b.UserDataDirForSession(session))
+				if _, err := os.Stat(issuerDataDir); err == nil {
+					err := os.Rename(issuerDataDir, filepath.Join(filepath.Dir(issuerDataDir), "provider_url"))
+					if err != nil {
+						require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename issuer data directory")
+						t.Logf("Failed to rename issuer data directory: %v", err)
+					}
+				}
+			}
+
 			golden.CheckOrUpdateFileTree(t, outDir)
 		})
 	}
