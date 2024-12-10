@@ -150,3 +150,239 @@ func TestParseConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestParseUserConfig(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		config string
+		check  func(userConfig)
+		err    error
+	}{
+		"All_are_allowed": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = ALL
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.AllUsersAllowed() != true {
+					t.Error("expected ALL users to be allowed")
+				}
+			},
+		},
+		"Only_owner_is_allowed": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.OwnerUserAllowed() != true {
+					t.Error("expected OWNER user to be allowed")
+				}
+				if uc.AllUsersAllowed() != false {
+					t.Error("expected ALL users to be not allowed")
+				}
+			},
+		},
+		"By_default_only_owner_is_allowed": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.OwnerUserAllowed() != true {
+					t.Error("expected OWNER user to be allowed")
+				}
+				if uc.AllUsersAllowed() != false {
+					t.Error("expected ALL users to be not allowed")
+				}
+			},
+		},
+		"Only_owner_is_allowed_but_is_unset": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.OwnerUserAllowed() != true {
+					t.Error("expected OWNER user to be allowed")
+				}
+				if uc.OwnerIsUnset() != true {
+					t.Error("expected onwer to be unset")
+				}
+				if uc.AllUsersAllowed() != false {
+					t.Error("expected ALL users to be not allowed")
+				}
+			},
+		},
+		"Only_owner_is_allowed_but_is_empty": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+owner =
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.OwnerUserAllowed() != true {
+					t.Error("expected OWNER user to be allowed")
+				}
+				if *uc.Owner() != "" {
+					t.Error("expected owner to be empty")
+				}
+				if uc.AllUsersAllowed() != false {
+					t.Error("expected ALL users to be not allowed")
+				}
+			},
+		},
+		"Users_u1_and_u2_are_allowed": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = u1,u2
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.OwnerUserAllowed() != false {
+					t.Error("expected OWNER user to be not allowed")
+				}
+				if uc.AllUsersAllowed() != false {
+					t.Error("expected ALL users to be not allowed")
+				}
+				if uc.IsUserAllowed("u1") != true {
+					t.Error("expected u1 user to be allowed")
+				}
+				if uc.IsUserAllowed("u2") != true {
+					t.Error("expected u2 user to be allowed")
+				}
+			},
+		},
+		"Unset_owner_and_u1_is_allowed": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER,u1
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.OwnerUserAllowed() != true {
+					t.Error("expected OWNER user to be allowed")
+				}
+				if uc.AllUsersAllowed() != false {
+					t.Error("expected ALL users to be not allowed")
+				}
+				if uc.IsUserAllowed("u1") != true {
+					t.Error("expected u1 user to be allowed")
+				}
+				if uc.OwnerIsUnset() != true {
+					t.Error("expected onwer to be unset")
+				}
+			},
+		},
+		"Set_owner_and_u1_is_allowed": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER,u1
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+			`,
+			check: func(uc userConfig) {
+				if uc.OwnerIsUnset() == true {
+					t.Errorf("expected not nil owner, got: %v", uc.owner)
+				}
+				if uc.AllUsersAllowed() != false {
+					t.Error("expected ALL users not to be allowed")
+				}
+				if uc.IsUserAllowed("u1") != true {
+					t.Error("expected u1 user to be allowed")
+				}
+				if *uc.Owner() != "machine_owner" {
+					t.Errorf("expected owner to be `machine_owner`, not `%v`", *uc.Owner())
+				}
+			},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			outDir := t.TempDir()
+			confPath := filepath.Join(outDir, "broker.conf")
+
+			err := os.WriteFile(confPath, []byte(tc.config), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			dropInDir := confPath + ".d"
+			err = os.Mkdir(dropInDir, 0700)
+			require.NoError(t, err, "Setup: Failed to create drop-in directory")
+
+			cfg, err := parseConfigFile(confPath)
+			tc.check(cfg)
+			require.NoError(t, err)
+			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
+
+func TestPersistOwner(t *testing.T) {
+	outDir := t.TempDir()
+	userName := "owner_name"
+	confPath := filepath.Join(outDir, "broker.conf")
+
+	err := os.WriteFile(confPath, []byte(configTypes["valid"]), 0600)
+	require.NoError(t, err, "Setup: Failed to write config file")
+
+	dropInDir := confPath + ".d"
+	err = os.Mkdir(dropInDir, 0700)
+	require.NoError(t, err, "Setup: Failed to create drop-in directory")
+
+	cfg := userConfig{}
+	err = cfg.PersistOwner(confPath, userName)
+	require.NoError(t, err)
+
+	f, err := os.Open(filepath.Join(dropInDir, "20-owner-autoregistration.conf"))
+	require.NoError(t, err, "failed to open 20-owner-autoregistration.conf")
+	defer f.Close()
+
+	golden.CheckOrUpdateFileTree(t, outDir)
+}

@@ -19,6 +19,10 @@ func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
 	cfg.homeBaseDir = homeBaseDir
 }
 
+func (cfg *Config) SetAllowedUsers(allowedUsers map[string]bool) {
+	cfg.allowedUsers = allowedUsers
+}
+
 func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
 }

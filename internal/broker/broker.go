@@ -45,14 +45,6 @@ type Config struct {
 	userConfig
 }
 
-type userConfig struct {
-	clientID           string
-	clientSecret       string
-	issuerURL          string
-	homeBaseDir        string
-	allowedSSHSuffixes []string
-}
-
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
 	cfg Config
@@ -364,7 +356,6 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		// Some providers support both of these authentication methods, some implement only one and
 		// some implement neither.
 		// This was tested with the following providers:
-		// - Google: supports client_secret_post
 		// - Ory Hydra: supports client_secret_post
 		// TODO @shipperizer: client_authentication methods should be configurable
 		if secret := session.oauth2Config.ClientSecret; secret != "" {
@@ -620,6 +611,10 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 	}
 
+	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		return AuthDenied, errorMessage{Message: "permission denied"}
+	}
+
 	if session.isOffline {
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
@@ -634,6 +629,40 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	token.CleanupOldEncryptedToken(session.oldEncryptedTokenPath)
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+}
+
+// userNameIsAllowed checks whether the user's username is allowed to access the machine.
+func (b *Broker) userNameIsAllowed(userName string) bool {
+	// The user is allowed to login if:
+	// - ALL users are allowed
+	// - the user's name is in the list of allowed_users
+	// - the user is the owner of the machine
+	allowed := false
+	if b.cfg.userConfig.AllUsersAllowed() {
+		allowed = true
+	} else if b.cfg.userConfig.IsUserAllowed(userName) {
+		allowed = true
+	} else if b.cfg.userConfig.OwnerUserAllowed() {
+		// If owner is undefined, then the first user to login is considered the owner
+		if b.cfg.userConfig.OwnerIsUnset() || *b.cfg.userConfig.Owner() == userName {
+			allowed = true
+		}
+	}
+
+	// If the owner is unset and allowed, we auto-generate a config file with the first
+	// user to login as the owner.
+	if b.cfg.userConfig.OwnerUserAllowed() && b.cfg.userConfig.OwnerIsUnset() {
+		if b.cfg.ConfigFile != "" {
+			// TODO(nsklikas): What should we do in case of error?
+			err := b.cfg.PersistOwner(b.cfg.ConfigFile, userName)
+			if err != nil {
+				slog.Warn(fmt.Sprintf("Failed to auto-register the owner: %f", err))
+			}
+		}
+		b.cfg.SetOwner(userName)
+	}
+
+	return allowed
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
