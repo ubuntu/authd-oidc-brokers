@@ -125,6 +125,16 @@ func (a *App) serve(config daemonConfig) error {
 		}
 	}
 
+	brokerConfigDir := config.Paths.BrokerConf + ".d"
+	// Should these dirs be created by the server or the snap?
+	// TODO(nsklikas): are these permissions correct?
+	if err := ensureDirWithPerms(brokerConfigDir, 0700, os.Geteuid()); err != nil {
+		if err := ensureDirWithPerms(brokerConfigDir, 0755, os.Geteuid()); err != nil {
+			close(a.ready)
+			return fmt.Errorf("error initializing broker configuration directory %q: %v", brokerConfigDir, err)
+		}
+	}
+
 	b, err := broker.New(broker.Config{
 		ConfigFile:            config.Paths.BrokerConf,
 		DataDir:               config.Paths.DataDir,
