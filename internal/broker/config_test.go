@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/stretchr/testify/require"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 )
 
@@ -56,6 +57,7 @@ issuer = https://higher-precedence-issuer.url.com
 
 func TestParseConfig(t *testing.T) {
 	t.Parallel()
+	p := &testutils.MockProvider{}
 
 	tests := map[string]struct {
 		configType string
@@ -121,7 +123,7 @@ func TestParseConfig(t *testing.T) {
 				require.NoError(t, err, "Setup: Failed to make drop-in file unreadable")
 			}
 
-			cfg, err := parseConfigFile(confPath)
+			cfg, err := parseConfigFile(confPath, p)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -238,6 +240,8 @@ allowed_ssh_suffixes = @issuer.url.com
 
 func TestParseUserConfig(t *testing.T) {
 	t.Parallel()
+	p := &testutils.MockProvider{}
+
 	tests := map[string]struct {
 		wantAllUsersAllowed       bool
 		wantOwnerAllowed          bool
@@ -316,7 +320,7 @@ func TestParseUserConfig(t *testing.T) {
 			err = os.Mkdir(dropInDir, 0700)
 			require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
-			cfg, err := parseConfigFile(confPath)
+			cfg, err := parseConfigFile(confPath, p)
 
 			// convert the allowed users array to a map
 			allowedUsersMap := map[string]struct{}{}

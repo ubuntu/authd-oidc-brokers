@@ -98,15 +98,17 @@ type Option func(*option)
 func New(cfg Config, args ...Option) (b *Broker, err error) {
 	defer decorate.OnError(&err, "could not create broker")
 
+	p := providers.CurrentProvider()
+
 	if cfg.ConfigFile != "" {
-		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile)
+		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile, p)
 		if err != nil {
 			return nil, fmt.Errorf("could not parse config: %v", err)
 		}
 	}
 
 	opts := option{
-		provider: providers.CurrentProvider(),
+		provider: p,
 	}
 	for _, arg := range args {
 		arg(&opts)

@@ -51,6 +51,10 @@ var (
 	ownerAutoRegistrationConfig embed.FS
 )
 
+type provider interface {
+	NormalizeUsername(username string) string
+}
+
 type templateEnv struct {
 	Owner string
 }
@@ -97,7 +101,7 @@ func getDropInFiles(cfgPath string) ([]any, error) {
 	return dropInFiles, nil
 }
 
-func populateUsersConfig(cfg *userConfig, users *ini.Section) {
+func populateUsersConfig(cfg *userConfig, users *ini.Section, p provider) {
 	if users == nil {
 		// The default behavior is to allow only the owner
 		cfg.ownerAllowed = true
@@ -131,16 +135,16 @@ func populateUsersConfig(cfg *userConfig, users *ini.Section) {
 			continue
 		}
 
-		cfg.allowedUsers[user] = struct{}{}
+		cfg.allowedUsers[p.NormalizeUsername(user)] = struct{}{}
 	}
 
 	// We need to read the owner key after we call HasKey, because the key is created
 	// when we call the "Key" function and we can't distinguish between empty and unset.
-	cfg.owner = users.Key(ownerKey).String()
+	cfg.owner = p.NormalizeUsername(users.Key(ownerKey).String())
 }
 
 // parseConfigFile parses the config file and returns a map with the configuration keys and values.
-func parseConfigFile(cfgPath string) (userConfig, error) {
+func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
 	cfg := userConfig{}
 
 	dropInFiles, err := getDropInFiles(cfgPath)
@@ -172,7 +176,7 @@ func parseConfigFile(cfgPath string) (userConfig, error) {
 		cfg.clientSecret = oidc.Key(clientSecret).String()
 	}
 
-	populateUsersConfig(&cfg, iniCfg.Section(usersSection))
+	populateUsersConfig(&cfg, iniCfg.Section(usersSection), p)
 
 	return cfg, nil
 }

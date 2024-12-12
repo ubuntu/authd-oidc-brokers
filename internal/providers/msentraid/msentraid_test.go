@@ -52,6 +52,35 @@ func TestCheckTokenScopes(t *testing.T) {
 	}
 }
 
+func TestNormalizeUsername(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		username string
+
+		normalizedUsername string
+	}{
+		"Shouldnt_change_all_lower_case": {
+			username:           "name@email.com",
+			normalizedUsername: "name@email.com",
+		},
+		"Should_convert_all_to_lower_case": {
+			username:           "NAME@email.com",
+			normalizedUsername: "name@email.com",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := msentraid.New()
+
+			ret := p.NormalizeUsername(tc.username)
+
+			require.Equal(t, tc.normalizedUsername, ret)
+		})
+	}
+}
+
 func TestVerifyUsername(t *testing.T) {
 	t.Parallel()
 
