@@ -19,8 +19,11 @@ func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
 	cfg.homeBaseDir = homeBaseDir
 }
 
-func (cfg *Config) SetAllowedUsers(allowedUsers map[string]struct{}) {
-	cfg.allowedUsers = allowedUsers
+func (cfg *Config) SetAllowedUsers(allowedUsers []string) {
+	cfg.allowedUsers = make(map[string]struct{})
+	for _, user := range allowedUsers {
+		cfg.allowedUsers[user] = struct{}{}
+	}
 }
 
 func (cfg *Config) SetOwner(owner string) {

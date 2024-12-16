@@ -23,7 +23,7 @@ import (
 type brokerForTestConfig struct {
 	broker.Config
 	issuerURL             string
-	allowedUsers          map[string]struct{}
+	allowedUsers          []string
 	allUsersAllowed       bool
 	ownerAllowed          bool
 	firstUserBecomesOwner bool
