@@ -54,9 +54,7 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	if cfg.allowedSSHSuffixes != nil {
 		cfg.SetAllowedSSHSuffixes(cfg.allowedSSHSuffixes)
 	}
-	if cfg.allowedUsers == nil {
-		cfg.SetAllowedUsers(map[string]struct{}{"OWNER": {}})
-	} else {
+	if cfg.allowedUsers != nil {
 		cfg.SetAllowedUsers(cfg.allowedUsers)
 	}
 	if cfg.owner != "" {
