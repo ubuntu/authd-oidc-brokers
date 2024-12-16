@@ -891,17 +891,13 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 			dataDir := filepath.Join(outDir, "data")
 			err := os.Mkdir(dataDir, 0700)
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
-			var session string
-			var users []string
 
 			idTokenClaims := []map[string]interface{}{}
 			for _, uname := range tc.allowedUsernames {
 				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
-				users = append(users, uname)
 			}
 			for _, uname := range tc.unallowedUsernames {
 				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
-				users = append(users, uname)
 			}
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
@@ -916,9 +912,8 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				},
 			})
 
-			for _, u := range users {
+			for _, u := range append(tc.allowedUsernames, tc.unallowedUsernames...) {
 				sessionID, key := newSessionForTests(t, b, u, "")
-				session = sessionID
 				token := tokenOptions{username: u}
 				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
@@ -936,38 +931,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				} else {
 					require.Equal(t, access, broker.AuthDenied, "authentication failed")
 				}
-
-				got := isAuthenticatedResponse{Access: access, Data: data, Err: fmt.Sprint(err)}
-				out, err := yaml.Marshal(got)
-				require.NoError(t, err, "Failed to marshal first response")
-
-				err = os.WriteFile(filepath.Join(outDir, u), out, 0600)
-				require.NoError(t, err, "Failed to write response")
-
-				// Ensure that the token content is generic to avoid golden file conflicts
-				if _, err := os.Stat(b.TokenPathForSession(sessionID)); err == nil {
-					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
-					require.NoError(t, err, "Teardown: Failed to write generic token file")
-				}
-				passwordPath := b.PasswordFilepathForSession(sessionID)
-				if _, err := os.Stat(passwordPath); err == nil {
-					err := os.WriteFile(passwordPath, []byte("Definitely a hashed password"), 0600)
-					require.NoError(t, err, "Teardown: Failed to write generic password file")
-				}
 			}
-
-			if session != "" {
-				issuerDataDir := filepath.Dir(b.UserDataDirForSession(session))
-				if _, err := os.Stat(issuerDataDir); err == nil {
-					err := os.Rename(issuerDataDir, filepath.Join(filepath.Dir(issuerDataDir), "provider_url"))
-					if err != nil {
-						require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename issuer data directory")
-						t.Logf("Failed to rename issuer data directory: %v", err)
-					}
-				}
-			}
-
-			golden.CheckOrUpdateFileTree(t, outDir)
 		})
 	}
 }

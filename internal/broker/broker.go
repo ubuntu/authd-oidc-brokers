@@ -618,7 +618,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	// If the owner is unset and allowed, we auto-generate a config file with the first
-	// user to login as the owner.
+	// user to log in as the owner.
 	if b.cfg.userConfig.shouldRegisterOwner() {
 		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
 			// The user is not allowed, if we fail to create the owner-autoregistration file.
