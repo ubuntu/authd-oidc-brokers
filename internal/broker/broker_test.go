@@ -833,52 +833,60 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 	t.Parallel()
+
+	u1 := "u1"
+	u2 := "u2"
+	u3 := "u3"
+	allUsers := []string{u1, u2, u3}
+
 	tests := map[string]struct {
 		owner                 string
 		ownerAllowed          bool
 		allUsersAllowed       bool
 		firstUserBecomesOwner bool
+		allowedUsers          []string
 
-		allowedUsers   []string
-		unallowedUsers []string
+		wantAllowedUsers   []string
+		wantUnallowedUsers []string
 	}{
 		"All_users_are_allowed": {
-			allUsersAllowed: true,
-			allowedUsers:    []string{"u1", "u2"},
+			allUsersAllowed:  true,
+			wantAllowedUsers: allUsers,
 		},
 		"Only_owner_allowed": {
-			ownerAllowed:   true,
-			owner:          "machine_owner",
-			allowedUsers:   []string{"machine_owner"},
-			unallowedUsers: []string{"u1", "u2"},
+			ownerAllowed:       true,
+			owner:              u1,
+			wantAllowedUsers:   []string{u1},
+			wantUnallowedUsers: []string{u2, u3},
 		},
 		"No_users_allowed": {
-			unallowedUsers: []string{"u1", "u2", "machine_owner", "u3"},
+			wantUnallowedUsers: allUsers,
 		},
 		"No_users_allowed_when_owner_is_allowed_but_not_set": {
-			ownerAllowed:   true,
-			unallowedUsers: []string{"u1", "u2", "machine_owner", "u3"},
+			ownerAllowed:       true,
+			wantUnallowedUsers: allUsers,
 		},
 		"Only_unset_owner_allowed": {
 			ownerAllowed:          true,
 			firstUserBecomesOwner: true,
-			allowedUsers:          []string{"random_user"},
-			unallowedUsers:        []string{"u1", "u2"},
+			wantAllowedUsers:      []string{u1},
+			wantUnallowedUsers:    []string{u2, u3},
 		},
 		"Specific_users_allowed": {
-			allowedUsers:   []string{"u1", "u2"},
-			unallowedUsers: []string{"u3"},
+			allowedUsers:       []string{u1, u2},
+			wantAllowedUsers:   []string{u1, u2},
+			wantUnallowedUsers: []string{u3},
 		},
 		"Specific_users_and_owner": {
-			ownerAllowed:   true,
-			owner:          "machine_owner",
-			allowedUsers:   []string{"u1", "u2", "machine_owner"},
-			unallowedUsers: []string{"u3"},
+			ownerAllowed:       true,
+			allowedUsers:       []string{u1},
+			owner:              u2,
+			wantAllowedUsers:   []string{u1, u2},
+			wantUnallowedUsers: []string{u3},
 		},
-		"Owner_is_disabled_even_when_registered": {
-			owner:          "machine_owner",
-			allowedUsers:   []string{"u1", "u2"},
-			unallowedUsers: []string{"machine_owner", "u3"},
+		"Owner_is_set_but_not_allowed": {
+			owner:              u1,
+			wantUnallowedUsers: allUsers,
 		},
 	}
 
@@ -891,10 +899,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
 			idTokenClaims := []map[string]interface{}{}
-			for _, uname := range tc.allowedUsers {
-				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
-			}
-			for _, uname := range tc.unallowedUsers {
+			for _, uname := range allUsers {
 				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
 			}
 
@@ -910,7 +915,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				},
 			})
 
-			for _, u := range append(tc.allowedUsers, tc.unallowedUsers...) {
+			for _, u := range allUsers {
 				sessionID, key := newSessionForTests(t, b, u, "")
 				token := tokenOptions{username: u}
 				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
@@ -924,11 +929,15 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 				require.NoError(t, err)
-				if slices.Contains(tc.allowedUsers, u) {
+				if slices.Contains(tc.wantAllowedUsers, u) {
 					require.Equal(t, access, broker.AuthGranted, "authentication failed")
-				} else {
-					require.Equal(t, access, broker.AuthDenied, "authentication failed")
+					continue
 				}
+				if slices.Contains(tc.wantUnallowedUsers, u) {
+					require.Equal(t, access, broker.AuthDenied, "authentication failed")
+					continue
+				}
+				t.Fatalf("user %s is not in the allowed or unallowed users list", u)
 			}
 		})
 	}
