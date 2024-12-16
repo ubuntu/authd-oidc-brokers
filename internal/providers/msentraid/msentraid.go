@@ -277,7 +277,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 func (p Provider) NormalizeUsername(username string) string {
 	// Microsoft Entra usernames are case-insensitive. We can safely use strings.ToLower here without worrying about
 	// different Unicode characters that fold to the same lowercase letter, because the Microsoft Entra username policy
-	// (which we checked above) ensures that the username only contains ASCII characters.
+	// (which we check in VerifyUsername) ensures that the username only contains ASCII characters.
 	return strings.ToLower(username)
 }
 

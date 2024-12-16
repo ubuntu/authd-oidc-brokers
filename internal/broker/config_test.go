@@ -249,61 +249,21 @@ func TestParseUserConfig(t *testing.T) {
 		wantOwner                 string
 		wantAllowedUsers          []string
 	}{
-		"All_are_allowed": {
-			wantAllUsersAllowed:       true,
-			wantOwnerAllowed:          false,
-			wantFirstUserBecomesOwner: false,
-			wantOwner:                 "machine_owner",
-			wantAllowedUsers:          []string{},
-		},
-		"Only_owner_is_allowed": {
-			wantAllUsersAllowed:       false,
-			wantOwnerAllowed:          true,
-			wantFirstUserBecomesOwner: false,
-			wantOwner:                 "machine_owner",
-			wantAllowedUsers:          []string{},
-		},
-		"By_default_only_owner_is_allowed": {
-			wantAllUsersAllowed:       false,
-			wantOwnerAllowed:          true,
-			wantFirstUserBecomesOwner: false,
-			wantOwner:                 "machine_owner",
-			wantAllowedUsers:          []string{},
-		},
-		"Only_owner_is_allowed_but_is_unset": {
-			wantAllUsersAllowed:       false,
-			wantOwnerAllowed:          true,
-			wantFirstUserBecomesOwner: true,
-			wantOwner:                 "",
-			wantAllowedUsers:          []string{},
-		},
-		"Only_owner_is_allowed_but_is_empty": {
-			wantAllUsersAllowed:       false,
-			wantOwnerAllowed:          true,
-			wantFirstUserBecomesOwner: false,
-			wantOwner:                 "",
-			wantAllowedUsers:          []string{},
-		},
-		"Users_u1_and_u2_are_allowed": {
-			wantAllUsersAllowed:       false,
-			wantOwnerAllowed:          false,
-			wantFirstUserBecomesOwner: false,
-			wantOwner:                 "",
-			wantAllowedUsers:          []string{"u1", "u2"},
-		},
+		"All_are_allowed":                    {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
+		"Only_owner_is_allowed":              {wantOwnerAllowed: true, wantOwner: "machine_owner"},
+		"By_default_only_owner_is_allowed":   {wantOwnerAllowed: true, wantOwner: "machine_owner"},
+		"Only_owner_is_allowed_but_is_unset": {wantOwnerAllowed: true, wantFirstUserBecomesOwner: true},
+		"Only_owner_is_allowed_but_is_empty": {wantOwnerAllowed: true},
+		"Users_u1_and_u2_are_allowed":        {wantAllowedUsers: []string{"u1", "u2"}},
 		"Unset_owner_and_u1_is_allowed": {
-			wantAllUsersAllowed:       false,
 			wantOwnerAllowed:          true,
 			wantFirstUserBecomesOwner: true,
-			wantOwner:                 "",
 			wantAllowedUsers:          []string{"u1"},
 		},
 		"Set_owner_and_u1_is_allowed": {
-			wantAllUsersAllowed:       false,
-			wantOwnerAllowed:          true,
-			wantFirstUserBecomesOwner: false,
-			wantOwner:                 "machine_owner",
-			wantAllowedUsers:          []string{"u1"},
+			wantOwnerAllowed: true,
+			wantOwner:        "machine_owner",
+			wantAllowedUsers: []string{"u1"},
 		},
 	}
 	for name, tc := range tests {
