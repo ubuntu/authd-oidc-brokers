@@ -116,18 +116,25 @@ func New(name string) *App {
 // serve creates new dbus service on the system bus. This call is blocking until we quit it.
 func (a *App) serve(config daemonConfig) error {
 	ctx := context.Background()
+	readyPtr := &a.ready
+	closeFunc := func() {
+		if readyPtr == nil {
+			return
+		}
+		close(*readyPtr)
+		readyPtr = nil
+	}
+	defer closeFunc()
 
 	// When the data directory is SNAP_DATA, it has permission 0755, else we want to create it with 0700.
 	if err := ensureDirWithPerms(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
 		if err := ensureDirWithPerms(config.Paths.DataDir, 0755, os.Geteuid()); err != nil {
-			close(a.ready)
 			return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
 		}
 	}
 
 	brokerConfigDir := broker.GetDropInDir(config.Paths.BrokerConf)
 	if err := ensureDirWithPerms(brokerConfigDir, 0700, os.Geteuid()); err != nil {
-		close(a.ready)
 		return fmt.Errorf("error initializing broker configuration directory %q: %v", brokerConfigDir, err)
 	}
 
@@ -142,7 +149,6 @@ func (a *App) serve(config daemonConfig) error {
 
 	s, err := dbusservice.New(ctx, b)
 	if err != nil {
-		close(a.ready)
 		return err
 	}
 
@@ -150,12 +156,11 @@ func (a *App) serve(config daemonConfig) error {
 	daemon, err := daemon.New(ctx, s, daemonopts...)
 	if err != nil {
 		_ = s.Stop()
-		close(a.ready)
 		return err
 	}
 
 	a.daemon = daemon
-	close(a.ready)
+	closeFunc()
 
 	return daemon.Serve(ctx)
 }
