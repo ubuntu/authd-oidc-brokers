@@ -3,7 +3,7 @@ module github.com/ubuntu/authd-oidc-brokers
 go 1.23.0
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.14.0
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
 	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/go-jose/go-jose/v4 v4.0.4
@@ -63,7 +63,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
-	golang.org/x/net v0.27.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
