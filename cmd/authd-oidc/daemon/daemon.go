@@ -14,6 +14,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
+	"github.com/ubuntu/authd-oidc-brokers/internal/log"
 )
 
 // App encapsulate commands and options of the daemon, which can be controlled by env variables and config files.
@@ -50,6 +51,9 @@ func New(name string) *App {
 		Long:  fmt.Sprintf("Authentication daemon %s to communicate with our authentication daemon.", name),
 		Args:  cobra.NoArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// First thing, initialize the log handler
+			log.InitHandler()
+
 			// Command parsing has been successful. Returns to not print usage anymore.
 			a.rootCmd.SilenceUsage = true
 
