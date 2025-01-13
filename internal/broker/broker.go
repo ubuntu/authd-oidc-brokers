@@ -632,6 +632,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		log.Errorf(context.Background(), "User %q is not allowed to log in", authInfo.UserInfo.Name)
 		return AuthDenied, errorMessage{Message: "permission denied"}
 	}
 
