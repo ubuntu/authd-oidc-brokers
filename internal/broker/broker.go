@@ -455,6 +455,8 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		return AuthCancelled, string(msg), ctx.Err()
 	}
 
+	log.Debugf(context.Background(), "Authentication result for session %s: %s", sessionID, access)
+
 	switch access {
 	case AuthRetry:
 		session.attemptsPerMode[session.selectedMode]++
@@ -468,11 +470,13 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
+		log.Debugf(context.Background(), "Could not update session: %v", err)
 		return AuthDenied, "{}", err
 	}
 
 	encoded, err := json.Marshal(iadResponse)
 	if err != nil {
+		log.Debugf(context.Background(), "Could not parse data to JSON: %v", err)
 		return AuthDenied, "{}", fmt.Errorf("could not parse data to JSON: %v", err)
 	}
 
