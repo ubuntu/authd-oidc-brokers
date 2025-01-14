@@ -5,7 +5,6 @@ go 1.23.0
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.17.0
 	github.com/coreos/go-oidc/v3 v3.12.0
-	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/go-jose/go-jose/v4 v4.0.4
 	github.com/godbus/dbus/v5 v5.1.0
