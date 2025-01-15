@@ -832,8 +832,8 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 	userInfo.Name = strings.ToLower(userInfo.Name)
 
 	// This means that home was not provided by the claims, so we need to set it to the broker default.
-	if !filepath.IsAbs(userInfo.Home) {
-		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
+	if userInfo.Home == "" {
+		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Name)
 	}
 
 	return userInfo, err
