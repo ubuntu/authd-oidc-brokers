@@ -19,4 +19,5 @@ type Provider interface {
 	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error)
 	NormalizeUsername(username string) string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
+	IsTokenExpiredError(err oauth2.RetrieveError) bool
 }
