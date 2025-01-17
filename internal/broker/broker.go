@@ -67,6 +67,7 @@ type session struct {
 	selectedMode    string
 	authModes       []string
 	attemptsPerMode map[string]int
+	nextAuthMode    string
 
 	oidcServer            *oidc.Provider
 	oauth2Config          oauth2.Config
@@ -76,8 +77,6 @@ type session struct {
 	passwordPath          string
 	tokenPath             string
 	oldEncryptedTokenPath string
-
-	currentAuthStep int
 
 	isAuthenticating *isAuthenticatedCtx
 }
@@ -274,13 +273,18 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 }
 
 func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints map[string]struct{}) (availableModes []string, err error) {
+	if session.nextAuthMode != "" {
+		availableModes = []string{session.nextAuthMode}
+		return availableModes, nil
+	}
+
 	switch session.mode {
 	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}
 		availableModes = []string{authmodes.Password}
-		if session.currentAuthStep > 0 {
+		if session.nextAuthMode == authmodes.NewPassword {
 			availableModes = []string{authmodes.NewPassword}
 		}
 
@@ -293,7 +297,7 @@ func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints
 		if tokenExists {
 			availableModes = append([]string{authmodes.Password}, availableModes...)
 		}
-		if session.currentAuthStep > 0 {
+		if session.nextAuthMode == authmodes.NewPassword {
 			availableModes = []string{authmodes.NewPassword}
 		}
 	}
@@ -478,9 +482,6 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 			access = AuthDenied
 			iadResponse = errorMessage{Message: "maximum number of attempts reached"}
 		}
-
-	case AuthNext:
-		session.currentAuthStep++
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
@@ -564,6 +565,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		session.authInfo["auth_info"] = authInfo
+		session.nextAuthMode = authmodes.NewPassword
+
 		return AuthNext, nil
 
 	case authmodes.Password:
