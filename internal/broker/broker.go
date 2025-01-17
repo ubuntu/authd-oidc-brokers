@@ -67,7 +67,7 @@ type session struct {
 	selectedMode    string
 	authModes       []string
 	attemptsPerMode map[string]int
-	nextAuthMode    string
+	nextAuthModes   []string
 
 	oidcServer            *oidc.Provider
 	oauth2Config          oauth2.Config
@@ -252,11 +252,13 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 }
 
 func (b *Broker) availableAuthModes(session session) (availableModes []string, err error) {
-	if session.nextAuthMode != "" {
-		if authModeIsAvailable(session, session.nextAuthMode) {
-			return []string{session.nextAuthMode}, nil
+	if len(session.nextAuthModes) > 0 {
+		for _, mode := range session.nextAuthModes {
+			if authModeIsAvailable(session, mode) {
+				availableModes = append(availableModes, mode)
+			}
 		}
-		return nil, fmt.Errorf("next auth mode is not available: %q", session.nextAuthMode)
+		return availableModes, nil
 	}
 
 	switch session.mode {
@@ -571,7 +573,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		session.authInfo["auth_info"] = authInfo
-		session.nextAuthMode = authmodes.NewPassword
+		session.nextAuthModes = []string{authmodes.NewPassword}
 
 		return AuthNext, nil
 
@@ -622,6 +624,14 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		// Refresh the token if we're online even if the token has not expired
 		if !session.isOffline {
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
+
+			var retrieveErr *oauth2.RetrieveError
+			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
+				// The refresh token is expired, so the user needs to authenticate via OIDC again.
+				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+				return AuthNext, nil
+			}
+
 			if err != nil {
 				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not refresh token"}
