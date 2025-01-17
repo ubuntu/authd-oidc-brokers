@@ -218,9 +218,6 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
 
-	log.Debugf(context.Background(), "Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts)
-	log.Debugf(context.Background(), "Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes)
-
 	// Checks if the token exists in the cache.
 	tokenExists, err := fileutils.FileExists(session.tokenPath)
 	if err != nil {
@@ -246,15 +243,15 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		}
 	}
 
-	availableModes, err := b.provider.CurrentAuthenticationModesOffered(
-		session.mode,
-		supportedAuthModes,
-		tokenExists,
-		!session.isOffline,
-		endpoints,
-		session.currentAuthStep)
+	availableModes, err := b.availableAuthModes(session, tokenExists, endpoints)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, mode := range availableModes {
+		if _, ok := supportedAuthModes[mode]; !ok {
+			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
+		}
 	}
 
 	for _, id := range availableModes {
@@ -274,6 +271,33 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	}
 
 	return authModes, nil
+}
+
+func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints map[string]struct{}) (availableModes []string, err error) {
+	switch session.mode {
+	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
+		if !tokenExists {
+			return nil, errors.New("user has no cached token")
+		}
+		availableModes = []string{authmodes.Password}
+		if session.currentAuthStep > 0 {
+			availableModes = []string{authmodes.NewPassword}
+		}
+
+	default: // auth mode
+		if _, ok := endpoints[authmodes.DeviceQr]; ok && !session.isOffline {
+			availableModes = []string{authmodes.DeviceQr}
+		} else if _, ok := endpoints[authmodes.Device]; ok && !session.isOffline {
+			availableModes = []string{authmodes.Device}
+		}
+		if tokenExists {
+			availableModes = append([]string{authmodes.Password}, availableModes...)
+		}
+		if session.currentAuthStep > 0 {
+			availableModes = []string{authmodes.NewPassword}
+		}
+	}
+	return availableModes, nil
 }
 
 func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
