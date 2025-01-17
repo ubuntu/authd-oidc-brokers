@@ -209,129 +209,135 @@ func (b *Broker) connectToOIDCServer(ctx context.Context) (*oidc.Provider, error
 }
 
 // GetAuthenticationModes returns the authentication modes available for the user.
-func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authModes []map[string]string, err error) {
+func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) ([]map[string]string, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
+	authModes := b.supportedAuthModesFromLayouts(supportedUILayouts)
+	log.Debugf(context.Background(), "Supported modes: %q", authModes)
 
-	// Checks if the token exists in the cache.
-	tokenExists, err := fileutils.FileExists(session.tokenPath)
-	if err != nil {
-		log.Warningf(context.Background(), "Could not check if token exists: %v", err)
-	}
-	if !tokenExists {
-		// Check the old encrypted token path.
-		tokenExists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
-		if err != nil {
-			log.Warningf(context.Background(), "Could not check if old encrypted token exists: %v", err)
-		}
-	}
-
-	endpoints := make(map[string]struct{})
-	if session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" {
-		authMode := authmodes.DeviceQr
-		if _, ok := supportedAuthModes[authMode]; ok {
-			endpoints[authMode] = struct{}{}
-		}
-		authMode = authmodes.Device
-		if _, ok := supportedAuthModes[authMode]; ok {
-			endpoints[authMode] = struct{}{}
-		}
-	}
-
-	availableModes, err := b.availableAuthModes(session, tokenExists, endpoints)
+	availableModes, err := b.availableAuthModes(session)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, mode := range availableModes {
-		if _, ok := supportedAuthModes[mode]; !ok {
-			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
-		}
-	}
-
-	for _, id := range availableModes {
-		authModes = append(authModes, map[string]string{
-			"id":    id,
-			"label": supportedAuthModes[id],
-		})
-	}
+	// Remove unavailable modes
+	authModes = slices.DeleteFunc(authModes, func(mode string) bool {
+		return !slices.Contains(availableModes, mode)
+	})
 
 	if len(authModes) == 0 {
 		return nil, fmt.Errorf("no authentication modes available for user %q", session.username)
 	}
 
-	session.authModes = availableModes
+	session.authModes = authModes
+	log.Debugf(context.Background(), "Available modes: %q", authModes)
+
 	if err := b.updateSession(sessionID, session); err != nil {
 		return nil, err
 	}
 
-	return authModes, nil
+	// Return the modes in the expected format
+	res := make([]map[string]string, len(authModes))
+	for i, mode := range authModes {
+		res[i] = map[string]string{
+			"id":    mode,
+			"label": authmodes.Label[mode],
+		}
+	}
+
+	return res, nil
 }
 
-func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints map[string]struct{}) (availableModes []string, err error) {
+func (b *Broker) availableAuthModes(session session) (availableModes []string, err error) {
 	if session.nextAuthMode != "" {
-		availableModes = []string{session.nextAuthMode}
-		return availableModes, nil
+		if authModeIsAvailable(session, session.nextAuthMode) {
+			return []string{session.nextAuthMode}, nil
+		}
+		return nil, fmt.Errorf("next auth mode is not available: %q", session.nextAuthMode)
 	}
 
 	switch session.mode {
 	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
-		if !tokenExists {
+		if !tokenExists(session) {
 			return nil, errors.New("user has no cached token")
 		}
-		availableModes = []string{authmodes.Password}
-		if session.nextAuthMode == authmodes.NewPassword {
-			availableModes = []string{authmodes.NewPassword}
-		}
+		return []string{authmodes.Password}, nil
 
-	default: // auth mode
-		if _, ok := endpoints[authmodes.DeviceQr]; ok && !session.isOffline {
-			availableModes = []string{authmodes.DeviceQr}
-		} else if _, ok := endpoints[authmodes.Device]; ok && !session.isOffline {
-			availableModes = []string{authmodes.Device}
+	default: // the session is for authenticating
+		for _, authMode := range []string{authmodes.DeviceQr, authmodes.Device, authmodes.Password} {
+			if authModeIsAvailable(session, authMode) {
+				availableModes = append(availableModes, authMode)
+			}
 		}
-		if tokenExists {
-			availableModes = append([]string{authmodes.Password}, availableModes...)
-		}
-		if session.nextAuthMode == authmodes.NewPassword {
-			availableModes = []string{authmodes.NewPassword}
-		}
+		return availableModes, nil
 	}
-	return availableModes, nil
 }
 
-func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
-	supportedModes = make(map[string]string)
-	for _, layout := range supportedUILayouts {
-		supportedEntries := strings.Split(strings.TrimPrefix(layout["entry"], "optional:"), ",")
-		switch layout["type"] {
-		case "qrcode":
-			if !strings.Contains(layout["wait"], "true") {
-				continue
-			}
-			deviceAuthID := authmodes.DeviceQr
-			if layout["renders_qrcode"] == "false" {
-				deviceAuthID = authmodes.Device
-			}
-			supportedModes[deviceAuthID] = "Device Authentication"
+func authModeIsAvailable(session session, authMode string) bool {
+	switch authMode {
+	case authmodes.Password:
+		return tokenExists(session)
+	case authmodes.NewPassword:
+		return true
+	case authmodes.Device, authmodes.DeviceQr:
+		return session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" && !session.isOffline
+	}
+	return false
+}
 
-		case "form":
-			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes[authmodes.Password] = "Local Password Authentication"
-			}
-
-		case "newpassword":
-			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes[authmodes.NewPassword] = "Define your local password"
-			}
-		}
+func tokenExists(session session) bool {
+	tokenExists, err := fileutils.FileExists(session.tokenPath)
+	if err != nil {
+		log.Warningf(context.Background(), "Could not check if token exists: %v", err)
+	}
+	if tokenExists {
+		return true
 	}
 
+	// Check the old encrypted token path.
+	tokenExists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
+	if err != nil {
+		log.Warningf(context.Background(), "Could not check if old encrypted token exists: %v", err)
+	}
+	return tokenExists
+}
+
+func (b *Broker) supportedAuthModesFromLayouts(supportedUILayouts []map[string]string) (supportedModes []string) {
+	for _, layout := range supportedUILayouts {
+		mode := b.supportedAuthModesFromLayout(layout)
+		if mode != "" {
+			supportedModes = append(supportedModes, mode)
+		}
+	}
 	return supportedModes
+}
+
+func (b *Broker) supportedAuthModesFromLayout(layout map[string]string) string {
+	supportedEntries := strings.Split(strings.TrimPrefix(layout["entry"], "optional:"), ",")
+	switch layout["type"] {
+	case "qrcode":
+		if !strings.Contains(layout["wait"], "true") {
+			return ""
+		}
+		if layout["renders_qrcode"] == "false" {
+			return authmodes.Device
+		}
+		return authmodes.DeviceQr
+
+	case "form":
+		if slices.Contains(supportedEntries, "chars_password") {
+			return authmodes.Password
+		}
+
+	case "newpassword":
+		if slices.Contains(supportedEntries, "chars_password") {
+			return authmodes.NewPassword
+		}
+	}
+	return ""
 }
 
 // SelectAuthenticationMode selects the authentication mode for the user.
