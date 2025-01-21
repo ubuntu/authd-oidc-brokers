@@ -56,9 +56,6 @@ func TestNewUser(t *testing.T) {
 			t.Parallel()
 
 			wantHome := tc.home
-			if tc.home == "" {
-				wantHome = tc.name
-			}
 
 			wantShell := tc.shell
 			if tc.shell == "" {

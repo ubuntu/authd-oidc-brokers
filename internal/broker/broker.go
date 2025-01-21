@@ -26,6 +26,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/stringutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
@@ -154,6 +155,9 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 // NewSession creates a new session for the user.
 func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
 	defer decorate.OnError(&err, "could not create new session for user %q", username)
+
+	// authd usernames are lowercase
+	username = strings.ToLower(username)
 
 	sessionID = uuid.New().String()
 	s := session{
@@ -452,6 +456,8 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		return AuthCancelled, string(msg), ctx.Err()
 	}
 
+	log.Debugf(context.Background(), "Authentication result for session %s: %s", sessionID, access)
+
 	switch access {
 	case AuthRetry:
 		session.attemptsPerMode[session.selectedMode]++
@@ -465,11 +471,13 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
+		log.Debugf(context.Background(), "Could not update session: %v", err)
 		return AuthDenied, "{}", err
 	}
 
 	encoded, err := json.Marshal(iadResponse)
 	if err != nil {
+		log.Debugf(context.Background(), "Could not parse data to JSON: %v", err)
 		return AuthDenied, "{}", fmt.Errorf("could not parse data to JSON: %v", err)
 	}
 
@@ -629,6 +637,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		log.Errorf(context.Background(), "User %q is not allowed to log in", authInfo.UserInfo.Name)
 		return AuthDenied, errorMessage{Message: "permission denied"}
 	}
 
@@ -813,9 +822,19 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, fmt.Errorf("username verification failed: %w", err)
 	}
 
+	// authd uses lowercase usernames. To avoid that strings.ToLower folds different Unicode characters to the same
+	// lowercase character, we check that it only contains ASCII characters. If this ever causes issues, we can instead
+	// implement our own ToLower function that doesn't fold different characters to the same lowercase character.
+	//
+	// Note that we keep the Gecos field as it is, as it is not used for authentication.
+	if !stringutils.IsASCII(userInfo.Name) {
+		return info.User{}, fmt.Errorf("username contains non-ASCII characters: %q", userInfo.Name)
+	}
+	userInfo.Name = strings.ToLower(userInfo.Name)
+
 	// This means that home was not provided by the claims, so we need to set it to the broker default.
-	if !filepath.IsAbs(userInfo.Home) {
-		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
+	if userInfo.Home == "" {
+		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Name)
 	}
 
 	return userInfo, err

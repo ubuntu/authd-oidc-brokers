@@ -29,10 +29,6 @@ func NewUser(name, home, uuid, shell, gecos string, groups []Group) User {
 		Gecos:  gecos,
 		Groups: groups,
 	}
-
-	if u.Home == "" {
-		u.Home = u.Name
-	}
 	if u.Shell == "" {
 		u.Shell = "/usr/bin/bash"
 	}

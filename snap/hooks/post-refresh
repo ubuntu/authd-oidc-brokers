@@ -16,6 +16,7 @@ PREVIOUS_VERSION=$(snapctl get previous-version)
 # contain the change (and which automatically uploaded to the edge channel)
 # will not be migrated.
 INITIAL_ALLOWED_USERS_VERSION="0.2.0-pre1"
+INITIAL_LOWERCASE_USERNAMES_VERSION="0.3.0-pre1"
 
 log() {
   logger -t "${SNAP_NAME}" "post-refresh: $*"
@@ -67,6 +68,38 @@ transition_to_allowed_users() {
   done
 }
 
+should_transition_to_lowercase_usernames() {
+  # Transition if:
+  # - previous-version is not set (that means that the previous version is
+  #   older than 0.2.0, i.e. the version where we introduced setting the
+  #   previous-version in the pre-refresh hook).
+  # - previous-version is less than the version where we introduced lowercase
+  [ -z "${PREVIOUS_VERSION}" ] || version_less_than "${PREVIOUS_VERSION}" "${INITIAL_LOWERCASE_USERNAMES_VERSION}"
+}
+
+transition_to_lowercase_usernames() {
+  log "Transitioning to lowercase usernames"
+    for f in "${SNAP_DATA}"/*/*; do
+        # Skip files which are not directories
+        if ! [ -d "${f}" ]; then
+            continue
+        fi
+
+        new_name=$(dirname "${f}")/$(basename "${f}" | tr '[:upper:]' '[:lower:]')
+        if [ "${f}" = "${new_name}" ]; then
+            continue
+        fi
+
+        log "Renaming ${f} to ${new_name}"
+        # Check if the new name already exists
+        if [ -e "${new_name}" ]; then
+            log "Error: ${new_name} already exists"
+            continue
+        fi
+        mv --no-clobber --no-target-directory "${f}" "${new_name}"
+    done
+}
+
 if [ -z "${PREVIOUS_VERSION}" ]; then
   log "previous-version: <not set>"
 else
@@ -75,4 +108,8 @@ fi
 
 if should_transition_to_allowed_users; then
   transition_to_allowed_users
+fi
+
+if should_transition_to_lowercase_usernames; then
+  transition_to_lowercase_usernames
 fi
