@@ -68,6 +68,9 @@ transition_to_allowed_users() {
   # directory is created by snapd with the correct permissions.
   mkdir -p --mode=0700 "${dest_dir}"
   for f in "${src_dir}"/*; do
+    if [ ! -f "${f}" ]; then
+      continue
+    fi
     cp --update=none "${f}" "${dest_dir}"
     chmod 0600 "${dest_dir}/$(basename "${f}")"
   done
