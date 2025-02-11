@@ -10,6 +10,8 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd/brokers/auth"
+	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )
 
@@ -40,15 +42,17 @@ func (p NoProvider) AuthOptions() []oauth2.AuthCodeOption {
 // CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
 func (p NoProvider) CurrentAuthenticationModesOffered(
 	sessionMode string,
-	supportedAuthModes map[string]string,
+	supportedAuthModes map[string]auth.Mode,
 	tokenExists bool,
 	providerReachable bool,
 	endpoints map[string]struct{},
 	currentAuthStep int,
 ) ([]string, error) {
+	log.Debugf(context.Background(), "In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n",
+		sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
 	var offeredModes []string
 	switch sessionMode {
-	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
+	case auth.SessionModeChangePassword, sessionmode.ChangePasswordNew:
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}
@@ -70,6 +74,7 @@ func (p NoProvider) CurrentAuthenticationModesOffered(
 			offeredModes = []string{authmodes.NewPassword}
 		}
 	}
+	log.Debugf(context.Background(), "Offered modes: %q", offeredModes)
 
 	for _, mode := range offeredModes {
 		if _, ok := supportedAuthModes[mode]; !ok {
