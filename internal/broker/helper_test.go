@@ -119,7 +119,7 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 		username = "test-user@email.com"
 	}
 	if mode == "" {
-		mode = sessionmode.Login
+		mode = sessionmode.LoginNew
 	}
 
 	id, key, err := b.NewSession(username, "some lang", mode)

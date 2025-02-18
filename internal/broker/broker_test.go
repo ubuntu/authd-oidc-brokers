@@ -20,6 +20,9 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/brokers/auth"
+	"github.com/ubuntu/authd/brokers/layouts"
+	"github.com/ubuntu/authd/brokers/layouts/entries"
 	"gopkg.in/yaml.v3"
 )
 
@@ -109,7 +112,7 @@ func TestNewSession(t *testing.T) {
 				customHandlers: tc.customHandlers,
 			})
 
-			id, _, err := b.NewSession("test-user", "lang", sessionmode.Login)
+			id, _, err := b.NewSession("test-user", "lang", sessionmode.LoginNew)
 			require.NoError(t, err, "NewSession should not have returned an error")
 
 			gotOffline, err := b.IsOffline(id)
@@ -120,38 +123,49 @@ func TestNewSession(t *testing.T) {
 	}
 }
 
+const (
+	formLayoutID                       = "form"
+	formWithoutEntryLayoutID           = "form-without-entry"
+	qrcodeLayoutID                     = "qrcode"
+	qrcodeWithoutWaitLayoutID          = "qrcode-without-wait"
+	qrcodeWithoutQrcodeLayoutID        = "qrcode-without-qrcode"
+	qrcodeWithoutWaitAndQrcodeLayoutID = "qrcode-without-wait-and-qrcode"
+	newPasswordLayoutID                = "newpassword"
+	newPasswordWithoutEntryLayoutID    = "newpassword-without-entry"
+)
+
 var supportedUILayouts = map[string]map[string]string{
-	"form": {
-		"type":  "form",
-		"entry": "chars_password",
+	formLayoutID: {
+		layouts.Type:  layouts.Form,
+		layouts.Entry: layouts.OptionalItems(entries.CharsPassword),
 	},
-	"form-without-entry": {
-		"type": "form",
-	},
-
-	"qrcode": {
-		"type": "qrcode",
-		"wait": "true",
-	},
-	"qrcode-without-wait": {
-		"type": "qrcode",
-	},
-	"qrcode-without-qrcode": {
-		"type":           "qrcode",
-		"renders_qrcode": "false",
-		"wait":           "true",
-	},
-	"qrcode-without-wait-and-qrcode": {
-		"type":           "qrcode",
-		"renders_qrcode": "false",
+	formWithoutEntryLayoutID: {
+		layouts.Type: layouts.Form,
 	},
 
-	"newpassword": {
-		"type":  "newpassword",
-		"entry": "chars_password",
+	qrcodeLayoutID: {
+		layouts.Type: layouts.QrCode,
+		layouts.Wait: layouts.True,
 	},
-	"newpassword-without-entry": {
-		"type": "newpassword",
+	qrcodeWithoutWaitLayoutID: {
+		layouts.Type: layouts.QrCode,
+	},
+	qrcodeWithoutQrcodeLayoutID: {
+		layouts.Type:          layouts.QrCode,
+		layouts.RendersQrCode: layouts.False,
+		layouts.Wait:          layouts.True,
+	},
+	qrcodeWithoutWaitAndQrcodeLayoutID: {
+		layouts.Type:          layouts.QrCode,
+		layouts.RendersQrCode: layouts.False,
+	},
+
+	newPasswordLayoutID: {
+		layouts.Type:  layouts.NewPassword,
+		layouts.Entry: layouts.RequiredItems(entries.CharsPassword),
+	},
+	newPasswordWithoutEntryLayoutID: {
+		layouts.Type: layouts.NewPassword,
 	},
 }
 
@@ -180,28 +194,28 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
 
 		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePassword, tokenExists: true},
-		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePassword, tokenExists: true, secondAuthStep: true},
-		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":                  {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true},
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePasswordNew, tokenExists: true},
+		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePasswordNew, tokenExists: true, secondAuthStep: true},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":                  {sessionMode: auth.SessionModeChangePassword, tokenExists: true},
 
 		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
 
 		// General errors
 		"Error_if_no_authentication_mode_is_supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
-		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
-		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
-		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
-		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
+		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{qrcodeWithoutWaitLayoutID}, wantErr: true},
+		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{qrcodeWithoutWaitAndQrcodeLayoutID}, wantErr: true},
+		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{newPasswordWithoutEntryLayoutID}, wantErr: true},
+		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{formWithoutEntryLayoutID}, wantErr: true},
 
 		// Change password session errors
-		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePassword, wantErr: true},
+		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePasswordNew, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			if tc.sessionMode == "" {
-				tc.sessionMode = sessionmode.Login
+				tc.sessionMode = sessionmode.LoginNew
 			}
 
 			cfg := &brokerForTestConfig{}
@@ -240,7 +254,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 
 			if tc.supportedLayouts == nil {
-				tc.supportedLayouts = []string{"form", "qrcode", "newpassword"}
+				tc.supportedLayouts = []string{formLayoutID, qrcodeLayoutID, newPasswordLayoutID}
 			}
 			var layouts []map[string]string
 			for _, layout := range tc.supportedLayouts {
@@ -260,15 +274,15 @@ func TestGetAuthenticationModes(t *testing.T) {
 }
 
 var supportedLayouts = []map[string]string{
-	supportedUILayouts["form"],
-	supportedUILayouts["qrcode"],
-	supportedUILayouts["newpassword"],
+	supportedUILayouts[formLayoutID],
+	supportedUILayouts[qrcodeLayoutID],
+	supportedUILayouts[newPasswordLayoutID],
 }
 
 var supportedLayoutsWithoutQrCode = []map[string]string{
-	supportedUILayouts["form"],
-	supportedUILayouts["qrcode-without-qrcode"],
-	supportedUILayouts["newpassword"],
+	supportedUILayouts[formLayoutID],
+	supportedUILayouts[qrcodeWithoutQrcodeLayoutID],
+	supportedUILayouts[newPasswordLayoutID],
 }
 
 func TestSelectAuthenticationMode(t *testing.T) {
@@ -333,9 +347,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 			b := newBrokerForTests(t, cfg)
 
-			sessionType := sessionmode.Login
+			sessionType := sessionmode.LoginNew
 			if tc.passwdSession {
-				sessionType = sessionmode.ChangePassword
+				sessionType = sessionmode.ChangePasswordNew
 			}
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
@@ -456,7 +470,7 @@ func TestIsAuthenticated(t *testing.T) {
 			useOldNameForSecretField: true,
 		},
 		"Authenticating_to_change_password_still_allowed_if_fetching_user_info_fails": {
-			sessionMode:      sessionmode.ChangePassword,
+			sessionMode:      sessionmode.ChangePasswordNew,
 			firstMode:        authmodes.Password,
 			token:            &tokenOptions{noUserInfo: true},
 			getUserInfoFails: true,
@@ -536,7 +550,7 @@ func TestIsAuthenticated(t *testing.T) {
 			t.Parallel()
 
 			if tc.sessionMode == "" {
-				tc.sessionMode = sessionmode.Login
+				tc.sessionMode = sessionmode.LoginNew
 			}
 
 			if tc.sessionOffline {
@@ -990,11 +1004,11 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 				require.NoError(t, err)
 				if slices.Contains(tc.wantAllowedUsers, u) {
-					require.Equal(t, broker.AuthGranted, access, "authentication failed")
+					require.Equal(t, auth.Granted, access, "authentication failed")
 					continue
 				}
 				if slices.Contains(tc.wantUnallowedUsers, u) {
-					require.Equal(t, broker.AuthDenied, access, "authentication failed")
+					require.Equal(t, auth.Denied, access, "authentication failed")
 					continue
 				}
 				t.Fatalf("user %s is not in the allowed or unallowed users list", u)
@@ -1058,7 +1072,7 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 			tc.token.issuer = defaultIssuerURL
 
-			sessionID, _, err := b.NewSession(tc.username, "lang", sessionmode.Login)
+			sessionID, _, err := b.NewSession(tc.username, "lang", sessionmode.LoginNew)
 			require.NoError(t, err, "Setup: Failed to create session for the tests")
 
 			cachedInfo := generateCachedInfo(t, tc.token)
