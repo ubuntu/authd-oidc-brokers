@@ -1,10 +1,13 @@
 package msentraid_test
 
 import (
+	"context"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"golang.org/x/oauth2"
 )
 
@@ -112,6 +115,66 @@ func TestVerifyUsername(t *testing.T) {
 			}
 
 			require.NoError(t, err, "VerifyUsername should not return an error")
+		})
+	}
+}
+
+func TestGetUserInfo(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		invalidIDToken   bool
+		tokenScopes      map[string]any
+		providerMetadata map[string]any
+
+		groupEndpointHandler http.HandlerFunc
+
+		wantErr bool
+	}{
+		"Successfully_get_user_info":                               {},
+		"Successfully_get_user_info_with_local_groups":             {groupEndpointHandler: localGroupHandler},
+		"Successfully_get_user_info_with_mixed_groups":             {groupEndpointHandler: mixedGroupHandler},
+		"Successfully_get_user_info_filtering_non_security_groups": {groupEndpointHandler: nonSecurityGroupHandler},
+
+		"Error_when_connecting_to_server":                {providerMetadata: map[string]any{"msgraph_host": "invalid"}, wantErr: true},
+		"Error_when_getting_user_claims":                 {invalidIDToken: true, wantErr: true},
+		"Error_when_getting_token_scopes":                {tokenScopes: map[string]any{"scope": struct{ notAString int }{10}}, wantErr: true},
+		"Error_when_token_does_not_have_required_scopes": {tokenScopes: map[string]any{"scope": "not the required scopes"}, wantErr: true},
+		"Error_when_getting_user_groups":                 {groupEndpointHandler: errorGroupHandler, wantErr: true},
+		"Error_when_group_is_missing_id":                 {groupEndpointHandler: missingIDGroupHandler, wantErr: true},
+		"Error_when_group_is_missing_display_name":       {groupEndpointHandler: missingDisplayNameGroupHandler, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			accessToken := validAccessToken
+			if tc.tokenScopes == nil {
+				tc.tokenScopes = map[string]any{"scope": msentraid.AllExpectedScopes()}
+			}
+			accessToken = accessToken.WithExtra(tc.tokenScopes)
+
+			idToken := validIDToken
+			if tc.invalidIDToken {
+				idToken = invalidIDToken
+			}
+
+			if tc.providerMetadata == nil {
+				msGraphMockURL, stopFunc := startMSGraphServerMock(tc.groupEndpointHandler)
+				t.Cleanup(stopFunc)
+				tc.providerMetadata = map[string]any{"msgraph_host": msGraphMockURL}
+			}
+
+			p := msentraid.New()
+			got, err := p.GetUserInfo(context.Background(), accessToken, idToken, tc.providerMetadata)
+			if tc.wantErr {
+				require.Error(t, err, "GetUserInfo should return an error")
+				return
+			}
+			require.NoError(t, err, "GetUserInfo should not return an error")
+
+			want := golden.LoadWithUpdateYAML(t, got)
+			require.Equal(t, want, got, "GetUserInfo should return the expected user info")
 		})
 	}
 }
