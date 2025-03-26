@@ -26,6 +26,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
@@ -138,7 +139,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	b = &Broker{
 		cfg:        cfg,
 		provider:   opts.provider,
-		oidcCfg:    oidc.Config{ClientID: cfg.clientID},
+		oidcCfg:    oidc.Config{ClientID: consts.MicrosoftBrokerAppID},
 		privateKey: privateKey,
 
 		currentSessions:   make(map[string]session),
@@ -185,10 +186,10 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	if s.oidcServer != nil {
 		s.oauth2Config = oauth2.Config{
-			ClientID:     b.oidcCfg.ClientID,
+			ClientID:     consts.MicrosoftBrokerAppID,
 			ClientSecret: b.cfg.clientSecret,
 			Endpoint:     s.oidcServer.Endpoint(),
-			Scopes:       append(consts.DefaultScopes, b.provider.AdditionalScopes()...),
+			Scopes:       consts.MicrosoftBrokerAppScopes,
 		}
 	}
 
@@ -202,6 +203,29 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 func (b *Broker) connectToOIDCServer(ctx context.Context) (*oidc.Provider, error) {
 	ctx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
+
+	//wellKnown := strings.TrimSuffix(b.cfg.issuerURL, "/") + "/.well-known/openid-configuration"
+	//req, err := http.NewRequest("GET", wellKnown, nil)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	//if err != nil {
+	//	return nil, err
+	//}
+	//defer resp.Body.Close()
+	//
+	//body, err := io.ReadAll(resp.Body)
+	//if err != nil {
+	//	return nil, fmt.Errorf("unable to read response body: %v", err)
+	//}
+	//
+	//if resp.StatusCode != http.StatusOK {
+	//	return nil, fmt.Errorf("%s: %s", resp.Status, body)
+	//}
+	//
+	//log.Debugf(ctx, "XXX: Got OIDC Discovery response: %s", body)
+	//return nil, fmt.Errorf("XXX: Not implemented")
 
 	return oidc.NewProvider(ctx, b.cfg.issuerURL)
 }
@@ -375,6 +399,17 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 	var uiLayout map[string]string
 	switch authModeID {
 	case authmodes.Device, authmodes.DeviceQr:
+		//if msentraidProvider, ok := b.provider.(msentraid.Provider); ok {
+		//	// Extract the tenant ID from the issuer URL
+		//	// https://login.microsoftonline.com/8de88d99-6d0f-44d7-a8a5-925b012e5940/v2.0
+		//	// -> 8de88d99-6d0f-44d7-a8a5-925b012e5940
+		//	tenantID := strings.Split(strings.TrimPrefix(b.cfg.issuerURL, "https://login.microsoftonline.com/"), "/")[0]
+		//	err := msentraidProvider.RegisterDevice(context.Background(), nil, tenantID)
+		//	if err != nil {
+		//		return nil, fmt.Errorf("could not register device: %v", err)
+		//	}
+		//}
+
 		ctx, cancel := context.WithTimeout(context.Background(), maxRequestDuration)
 		defer cancel()
 
@@ -398,6 +433,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			authOpts = append(authOpts, oauth2.SetAuthURLParam("client_secret", secret))
 		}
 
+		log.Infof(context.Background(), "XXX: Calling DeviceAuth")
 		response, err := session.oauth2Config.DeviceAuth(ctx, authOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
@@ -542,6 +578,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
+		log.Infof(context.Background(), "XXX: Calling DeviceAccessToken")
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
 			log.Errorf(context.Background(), "could not authenticate user remotely: %s", err)
@@ -566,15 +603,36 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
 		}
 
+		// XXX: Perform device registration if the provider is msentraid
+		if msentraidProvider, ok := b.provider.(msentraid.Provider); ok {
+			// Extract the tenant ID from the issuer URL
+			// https://login.microsoftonline.com/8de88d99-6d0f-44d7-a8a5-925b012e5940/v2.0
+			// -> 8de88d99-6d0f-44d7-a8a5-925b012e5940
+			tenantID := strings.Split(strings.TrimPrefix(b.cfg.issuerURL, "https://login.microsoftonline.com/"), "/")[0]
+			nameParts := strings.Split(session.username, "@")
+			if len(nameParts) != 2 {
+				log.Errorf(context.Background(), "username is not in the format <username>@<domain>: %s", session.username)
+				return AuthDenied, errorMessage{Message: "username is not in the format <username>@<domain>"}
+			}
+			domain := nameParts[1]
+			err = msentraidProvider.RegisterDevice(ctx, authInfo.Token, b.cfg.clientID, tenantID, domain)
+			if err != nil {
+				log.Error(context.Background(), err.Error())
+				return AuthDenied, errorMessage{Message: "could not register device"}
+			}
+		}
+
+		// XXX: Enable again once we have a token with the required scopes
+		//authInfo.UserInfo = info.User{Name: session.username}
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
-			log.Errorf(context.Background(), "could not fetch user info: %s", err)
+			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 
 		if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-			log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-			return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
+			log.Warningf(context.Background(), "User %q is not in the list of allowed users", authInfo.UserInfo.Name)
+			return AuthDenied, errorMessage{Message: "permission denied"}
 		}
 
 		session.authInfo["auth_info"] = authInfo
@@ -676,6 +734,26 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		if err = password.HashAndStorePassword(secret, session.passwordPath); err != nil {
 			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessage{Message: "could not store password"}
+		}
+	}
+
+	// XXX: Perform device registration if the provider is msentraid
+	// TODO: Only do this after device authentication (?)
+	if msentraidProvider, ok := b.provider.(msentraid.Provider); ok {
+		// Extract the tenant ID from the issuer URL
+		// https://login.microsoftonline.com/8de88d99-6d0f-44d7-a8a5-925b012e5940/v2.0
+		// -> 8de88d99-6d0f-44d7-a8a5-925b012e5940
+		tenantID := strings.Split(strings.TrimPrefix(b.cfg.issuerURL, "https://login.microsoftonline.com/"), "/")[0]
+		nameParts := strings.Split(authInfo.UserInfo.Name, "@")
+		if len(nameParts) != 2 {
+			log.Error(context.Background(), "username is not in the format <username>@<domain>")
+			return AuthDenied, errorMessage{Message: "username is not in the format <username>@<domain>"}
+		}
+		domain := nameParts[1]
+		err = msentraidProvider.RegisterDevice(ctx, authInfo.Token, b.cfg.clientID, tenantID, domain)
+		if err != nil {
+			log.Error(context.Background(), err.Error())
+			return AuthDenied, errorMessage{Message: "could not register device"}
 		}
 	}
 
