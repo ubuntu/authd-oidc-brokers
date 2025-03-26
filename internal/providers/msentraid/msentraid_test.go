@@ -3,56 +3,19 @@ package msentraid_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
-	"golang.org/x/oauth2"
+	"github.com/ubuntu/authd/log"
 )
 
 func TestNew(t *testing.T) {
 	p := msentraid.New()
 
 	require.NotEmpty(t, p, "New should return a non-empty provider")
-}
-
-func TestCheckTokenScopes(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		scopes            string
-		noExtraScopeField bool
-
-		wantErr bool
-	}{
-		"Success_when_checking_all_scopes_are_present":       {scopes: msentraid.AllExpectedScopes()},
-		"Success_even_if_getting_more_scopes_than_requested": {scopes: msentraid.AllExpectedScopes() + " extra-scope"},
-
-		"Error_with_missing_scopes":       {scopes: "profile email", wantErr: true},
-		"Error_without_extra_scope_field": {noExtraScopeField: true, wantErr: true},
-		"Error_with_empty_scopes":         {scopes: "", wantErr: true},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			p := msentraid.New()
-
-			token := &oauth2.Token{}
-			if !tc.noExtraScopeField {
-				token = token.WithExtra(map[string]interface{}{"scope": any(tc.scopes)})
-			}
-
-			err := p.CheckTokenScopes(token)
-			if tc.wantErr {
-				require.Error(t, err, "CheckTokenScopes should return an error")
-				return
-			}
-
-			require.NoError(t, err, "CheckTokenScopes should not return an error")
-		})
-	}
 }
 
 func TestNormalizeUsername(t *testing.T) {
@@ -124,7 +87,7 @@ func TestGetUserInfo(t *testing.T) {
 
 	tests := map[string]struct {
 		invalidIDToken   bool
-		tokenScopes      map[string]any
+		tokenScopes      []string
 		providerMetadata map[string]any
 
 		groupEndpointHandler http.HandlerFunc
@@ -138,8 +101,7 @@ func TestGetUserInfo(t *testing.T) {
 
 		"Error_when_msgraph_host_is_invalid":             {providerMetadata: map[string]any{"msgraph_host": "invalid"}, wantErr: true},
 		"Error_when_id_token_claims_are_invalid":         {invalidIDToken: true, wantErr: true},
-		"Error_when_token_scopes_have_incorrect_type":    {tokenScopes: map[string]any{"scope": struct{ notAString int }{10}}, wantErr: true},
-		"Error_when_token_does_not_have_required_scopes": {tokenScopes: map[string]any{"scope": "not the required scopes"}, wantErr: true},
+		"Error_when_token_does_not_have_required_scopes": {tokenScopes: []string{"not the required scopes"}, wantErr: true},
 		"Error_when_getting_user_groups_fails":           {groupEndpointHandler: errorGroupHandler, wantErr: true},
 		"Error_when_group_is_missing_id":                 {groupEndpointHandler: missingIDGroupHandler, wantErr: true},
 		"Error_when_group_is_missing_display_name":       {groupEndpointHandler: missingDisplayNameGroupHandler, wantErr: true},
@@ -148,11 +110,9 @@ func TestGetUserInfo(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			accessToken := validAccessToken
 			if tc.tokenScopes == nil {
-				tc.tokenScopes = map[string]any{"scope": msentraid.AllExpectedScopes()}
+				tc.tokenScopes = strings.Split(msentraid.AllExpectedScopes(), " ")
 			}
-			accessToken = accessToken.WithExtra(tc.tokenScopes)
 
 			idToken := validIDToken
 			if tc.invalidIDToken {
@@ -166,7 +126,10 @@ func TestGetUserInfo(t *testing.T) {
 			}
 
 			p := msentraid.New()
-			got, err := p.GetUserInfo(context.Background(), accessToken, idToken, tc.providerMetadata)
+			p.SkipAccessTokenForGraphAPI()
+			p.SetTokenScopesForGraphAPI(tc.tokenScopes)
+
+			got, err := p.GetUserInfo(context.Background(), "", validAccessToken, idToken, tc.providerMetadata)
 			if tc.wantErr {
 				require.Error(t, err, "GetUserInfo should return an error")
 				return
@@ -176,4 +139,10 @@ func TestGetUserInfo(t *testing.T) {
 			golden.CheckOrUpdateYAML(t, got)
 		})
 	}
+}
+
+func TestMain(m *testing.M) {
+	log.SetLevel(log.DebugLevel)
+
+	m.Run()
 }
