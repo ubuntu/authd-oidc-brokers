@@ -28,6 +28,11 @@ const (
 	// clientSecret is the optional client secret for this client.
 	clientSecret = "client_secret"
 
+	// entraIDSection is the section name in the config file for Microsoft Entra ID specific configuration.
+	entraIDSection = "msentraid"
+	// registerDeviceKey is the key in the config file for the setting that enables automatic device registration.
+	registerDeviceKey = "register_device"
+
 	// usersSection is the section name in the config file for the users and broker specific configuration.
 	usersSection = "users"
 	// allowedUsersKey is the key in the config file for the users that are allowed to access the machine.
@@ -73,6 +78,7 @@ type userConfig struct {
 	issuerURL    string
 
 	forceProviderAuthentication bool
+	registerDevice              bool
 
 	allowedUsers          map[string]struct{}
 	allUsersAllowed       bool
@@ -217,11 +223,20 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 		cfg.issuerURL = oidc.Key(issuerKey).String()
 		cfg.clientID = oidc.Key(clientIDKey).String()
 		cfg.clientSecret = oidc.Key(clientSecret).String()
+
 		if oidc.HasKey(forceProviderAuthenticationKey) {
 			cfg.forceProviderAuthentication, err = oidc.Key(forceProviderAuthenticationKey).Bool()
 			if err != nil {
 				return userConfig{}, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
 			}
+		}
+	}
+
+	entraID := iniCfg.Section(entraIDSection)
+	if entraID != nil && entraID.HasKey(registerDeviceKey) {
+		cfg.registerDevice, err = entraID.Key(registerDeviceKey).Bool()
+		if err != nil {
+			return userConfig{}, fmt.Errorf("error parsing '%s': %w", registerDeviceKey, err)
 		}
 	}
 
