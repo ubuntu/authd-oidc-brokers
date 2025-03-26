@@ -2,7 +2,10 @@
 package google
 
 import (
+	"context"
+
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/genericprovider"
+	"golang.org/x/oauth2"
 )
 
 // Provider is the google provider implementation.
@@ -25,4 +28,9 @@ func New() Provider {
 // More info on https://developers.google.com/identity/protocols/oauth2/limited-input-device#allowedscopes.
 func (Provider) AdditionalScopes() []string {
 	return []string{}
+}
+
+// MaybeRegisterDevice is a no-op for the Google provider, because Google does not support device registration.
+func (Provider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string) error {
+	return nil
 }
