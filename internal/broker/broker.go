@@ -139,7 +139,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	b = &Broker{
 		cfg:        cfg,
 		provider:   opts.provider,
-		oidcCfg:    oidc.Config{ClientID: cfg.clientID},
+		oidcCfg:    oidc.Config{ClientID: consts.MicrosoftBrokerAppID},
 		privateKey: privateKey,
 
 		currentSessions:   make(map[string]session),
@@ -184,10 +184,10 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	if s.oidcServer != nil {
 		s.oauth2Config = oauth2.Config{
-			ClientID:     b.oidcCfg.ClientID,
+			ClientID:     consts.MicrosoftBrokerAppID,
 			ClientSecret: b.cfg.clientSecret,
 			Endpoint:     s.oidcServer.Endpoint(),
-			Scopes:       append(consts.DefaultScopes, b.provider.AdditionalScopes()...),
+			Scopes:       consts.MicrosoftBrokerAppScopes,
 		}
 	}
 
@@ -546,10 +546,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
 		}
 
-		if err = b.provider.CheckTokenScopes(t); err != nil {
-			log.Warningf(context.Background(), "error checking token scopes: %s", err)
-		}
-
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
 			log.Error(context.Background(), "could not get ID token")
@@ -859,12 +855,17 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, errors.New("session is in offline mode")
 	}
 
+	err = b.provider.MaybeRegisterDevice(ctx, t.Token, session.username, b.cfg.issuerURL)
+	if err != nil {
+		return info.User{}, fmt.Errorf("could not register device: %v", err)
+	}
+
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken, t.ProviderMetadata)
+	userInfo, err = b.provider.GetUserInfo(ctx, b.cfg.clientID, t.Token, idToken, t.ProviderMetadata)
 	if err != nil {
 		return info.User{}, err
 	}

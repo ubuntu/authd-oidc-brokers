@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
@@ -215,7 +216,7 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"iss":                options.issuer,
 		"sub":                "saved-user-id",
-		"aud":                "test-client-id",
+		"aud":                consts.MicrosoftBrokerAppID,
 		"exp":                9999999999,
 		"name":               "test-user",
 		"preferred_username": "test-user-preferred-username@email.com",
