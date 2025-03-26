@@ -233,12 +233,9 @@ func TestGetAuthenticationModes(t *testing.T) {
 				sessionID = ""
 			}
 			if tc.tokenExists {
-				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
-				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
-				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
-				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
@@ -349,12 +346,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
 			if tc.tokenExists {
-				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
-				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
-				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
-				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
