@@ -26,6 +26,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
@@ -136,10 +137,15 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		return nil, errors.New("failed to generate broker private key")
 	}
 
+	clientID := cfg.clientID
+	if opts.provider.SupportsDeviceRegistration() && cfg.registerDevice {
+		clientID = consts.MicrosoftBrokerAppID
+	}
+
 	b = &Broker{
 		cfg:        cfg,
 		provider:   opts.provider,
-		oidcCfg:    oidc.Config{ClientID: cfg.clientID},
+		oidcCfg:    oidc.Config{ClientID: clientID},
 		privateKey: privateKey,
 
 		currentSessions:   make(map[string]session),
@@ -182,12 +188,17 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		s.isOffline = true
 	}
 
+	scopes := append(consts.DefaultScopes, b.provider.AdditionalScopes()...)
+	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+		scopes = consts.MicrosoftBrokerAppScopes
+	}
+
 	if s.oidcServer != nil {
 		s.oauth2Config = oauth2.Config{
 			ClientID:     b.oidcCfg.ClientID,
 			ClientSecret: b.cfg.clientSecret,
 			Endpoint:     s.oidcServer.Endpoint(),
-			Scopes:       append(consts.DefaultScopes, b.provider.AdditionalScopes()...),
+			Scopes:       scopes,
 		}
 	}
 
@@ -246,7 +257,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 func (b *Broker) availableAuthModes(session session) (availableModes []string, err error) {
 	if len(session.nextAuthModes) > 0 {
 		for _, mode := range session.nextAuthModes {
-			if !authModeIsAvailable(session, mode) {
+			if !b.authModeIsAvailable(session, mode) {
 				log.Infof(context.Background(), "Authentication mode %q is not available", mode)
 				continue
 			}
@@ -270,7 +281,7 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 		// when it's not necessary.
 		modes := append([]string{authmodes.Password}, b.provider.SupportedOIDCAuthModes()...)
 		for _, mode := range modes {
-			if authModeIsAvailable(session, mode) {
+			if b.authModeIsAvailable(session, mode) {
 				availableModes = append(availableModes, mode)
 			}
 		}
@@ -278,10 +289,50 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 	}
 }
 
-func authModeIsAvailable(session session, authMode string) bool {
+func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 	switch authMode {
 	case authmodes.Password:
-		return tokenExists(session) && passwordFileExists(session)
+		if !tokenExists(session) {
+			log.Debugf(context.Background(), "Token does not exist for user %q, so local password authentication is not available", session.username)
+			return false
+		}
+
+		if !passwordFileExists(session) {
+			log.Debugf(context.Background(), "Password file does not exist for user %q, so local password authentication is not available", session.username)
+			return false
+		}
+
+		authInfo, err := token.LoadAuthInfo(session.tokenPath)
+		if err != nil {
+			log.Warningf(context.Background(), "Could not load token, so local password authentication is not available: %v", err)
+			return false
+		}
+
+		if !b.provider.SupportsDeviceRegistration() {
+			// If the provider does not support device registration,
+			// we can always use the token for local password authentication.
+			log.Debugf(context.Background(), "Provider does not support device registration, so local password authentication is available for user %q", session.username)
+			return true
+		}
+
+		isTokenForDeviceRegistration, err := b.provider.IsTokenForDeviceRegistration(authInfo.Token)
+		if err != nil {
+			log.Warningf(context.Background(), "Could not check if token is for device registration, so local password authentication is not available: %v", err)
+			return false
+		}
+
+		if b.cfg.registerDevice && !isTokenForDeviceRegistration {
+			// TODO: We might want to display a message to the user in this case
+			log.Noticef(context.Background(), "Token exists for user %q, but it cannot be used for device registration, so local password authentication is not available", session.username)
+			return false
+		}
+		if !b.cfg.registerDevice && isTokenForDeviceRegistration {
+			// TODO: We might want to display a message to the user in this case
+			log.Noticef(context.Background(), "Token exists for user %q, but it requires device registration, so local password authentication is not available", session.username)
+			return false
+		}
+
+		return true
 	case authmodes.NewPassword:
 		return true
 	case authmodes.Device, authmodes.DeviceQr:
@@ -554,10 +605,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 		log.Debug(ctx, "Exchanged device code for token.")
 
-		if err = b.provider.CheckTokenScopes(t); err != nil {
-			log.Warningf(context.Background(), "error checking token scopes: %s", err)
-		}
-
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
 			log.Error(context.Background(), "could not get ID token")
@@ -639,6 +686,11 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		// Try to refresh the user info
 		userInfo, err := b.fetchUserInfo(ctx, session, authInfo)
+		if errors.Is(err, msentraid.ErrDeviceDisabled) {
+			// The device is disabled, deny login
+			log.Errorf(context.Background(), "Login failed: %s", err)
+			return AuthDenied, errorMessage{Message: err.Error()}
+		}
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
 			log.Errorf(context.Background(), "could not fetch user info: %s", err)
@@ -860,6 +912,7 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.provider)
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.UserInfo = oldToken.UserInfo
+	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
 	return t, nil
 }
 
@@ -868,12 +921,27 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, errors.New("session is in offline mode")
 	}
 
+	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+		deviceRegistrationData, err := b.provider.MaybeRegisterDevice(ctx, t.Token, session.username, b.cfg.issuerURL, t.DeviceRegistrationData)
+		if err != nil {
+			return info.User{}, fmt.Errorf("could not register device: %v", err)
+		}
+		t.DeviceRegistrationData = deviceRegistrationData
+	}
+
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken, t.ProviderMetadata)
+	userInfo, err = b.provider.GetUserInfo(ctx,
+		b.cfg.clientID,
+		b.cfg.issuerURL,
+		t.Token,
+		idToken,
+		t.ProviderMetadata,
+		t.DeviceRegistrationData,
+	)
 	if err != nil {
 		return info.User{}, err
 	}
