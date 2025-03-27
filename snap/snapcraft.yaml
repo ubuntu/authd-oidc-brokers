@@ -65,6 +65,16 @@ parts:
       "authd.conf": "conf/authd/msentraid.conf"
       "broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
+
+  libhimmelblau:
+    source: libhimmelblau/
+    source-type: local
+    plugin: rust
+    override-build: |
+      cargo build --release --target-dir target --lib
+      install -D target/release/libhimmelblau.so $CRAFT_PART_INSTALL/lib/libhimmelblau.so      
+      install -D libhimmelblau/src/lib.rs $CRAFT_PART_INSTALL/include/libhimmelblau.h
+
   # SemVer comparison helper
   semver:
     source: tools

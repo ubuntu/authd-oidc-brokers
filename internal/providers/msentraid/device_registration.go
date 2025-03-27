@@ -2,6 +2,27 @@ package msentraid
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+)
+
+/*
+#cgo LDFLAGS: -lhimmelblau
+
+extern
+
+import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -36,6 +57,10 @@ func (p Provider) SupportsDeviceRegistration() bool {
 }
 
 func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clientID, tenantID string) error {
+
+}
+
+func (p Provider) RegisterDeviceInGo(ctx context.Context, token *oauth2.Token, clientID, tenantID string) error {
 	accessToken, err := acquireAccessTokenForRegisteringDevice(ctx, token, clientID, tenantID)
 	if err != nil {
 		return fmt.Errorf("error acquiring access token for registering device: %w", err)
