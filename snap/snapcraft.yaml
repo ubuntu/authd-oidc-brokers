@@ -47,6 +47,21 @@ slots:
     name: com.ubuntu.authd.MSEntraID
 
 parts:
+  libhimmelblau:
+    source: libhimmelblau/
+    source-type: local
+    plugin: rust
+    build-packages:
+      - cargo-c
+    override-build: |
+      cargo cbuild --release --target-dir target --lib     
+      echo "Installing libhimmelblau.so and himmelblau.h"
+      # Rust uses `unknown-linux-gnu` in the target, but snap uses `linux-gnu`
+      ARCH_DIR="${CRAFT_ARCH_TRIPLET_BUILD_FOR//-linux-gnu/-unknown-linux-gnu}"
+      echo "CRAFT_PART_INSTALL: ${CRAFT_PART_INSTALL}"
+      install -D target/${ARCH_DIR}/release/libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so
+      ln -s libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so.0
+      install -D target/${ARCH_DIR}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
   broker:
     source: .
     source-type: local
@@ -54,9 +69,23 @@ parts:
     go-buildtags: [withmsentraid]
     build-snaps:
       - go
+    after: [libhimmelblau]
     override-build: |
+      echo "CRAFT_STAGE: ${CRAFT_STAGE}"
+      echo "Files in CRAFT_STAGE:"
+      find ${CRAFT_STAGE} -type f
+
+      # Ensure the paths are absolute and correct
+      export CGO_CFLAGS="-I${CRAFT_STAGE}/include"
+      export CGO_LDFLAGS="-L${CRAFT_STAGE}/lib -lhimmelblau"
+
+      # Debug the paths
+      echo "CGO_CFLAGS: $CGO_CFLAGS"
+      echo "CGO_LDFLAGS: $CGO_LDFLAGS"
+
       go mod download all
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
+
   config:
     source: conf/
     source-type: local
@@ -65,15 +94,6 @@ parts:
       "authd.conf": "conf/authd/msentraid.conf"
       "broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
-
-  libhimmelblau:
-    source: libhimmelblau/
-    source-type: local
-    plugin: rust
-    override-build: |
-      cargo build --release --target-dir target --lib
-      install -D target/release/libhimmelblau.so $CRAFT_PART_INSTALL/lib/libhimmelblau.so      
-      install -D libhimmelblau/src/lib.rs $CRAFT_PART_INSTALL/include/libhimmelblau.h
 
   # SemVer comparison helper
   semver:
