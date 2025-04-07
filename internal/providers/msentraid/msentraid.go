@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,6 +27,12 @@ import (
 
 func init() {
 	pp.ColoringEnabled = false
+
+	// Enable debug logging for libhimmelblau
+	err := os.Setenv("RUST_LOG", "debug")
+	if err != nil {
+		log.Warning(context.Background(), fmt.Sprintf("Failed to set RUST_LOG: %v", err))
+	}
 }
 
 const (
@@ -107,7 +114,20 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
-func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
+func (p Provider) GetUserInfo(ctx context.Context, token *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
+	accessToken, err := AcquireAccessTokenForGraphAPI(ctx, token)
+	if err != nil {
+		return info.User{}, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %v", err)
+	}
+	// Clone the OAuth2 token and set the new access token
+	newToken := &oauth2.Token{
+		AccessToken:  accessToken,
+		TokenType:    token.TokenType,
+		RefreshToken: token.RefreshToken,
+		Expiry:       token.Expiry,
+		ExpiresIn:    token.ExpiresIn,
+	}
+
 	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
 	if providerMetadata["msgraph_host"] != nil {
 		var ok bool
@@ -128,7 +148,7 @@ func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, id
 		return info.User{}, err
 	}
 
-	userGroups, err := p.getGroups(accessToken, msgraphHost)
+	userGroups, err := p.getGroups(newToken, msgraphHost)
 	if err != nil {
 		return info.User{}, err
 	}

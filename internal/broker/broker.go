@@ -224,7 +224,7 @@ func (b *Broker) connectToOIDCServer(ctx context.Context) (*oidc.Provider, error
 	//	return nil, fmt.Errorf("%s: %s", resp.Status, body)
 	//}
 	//
-	//log.Debugf(ctx, "\nXXX: Got OIDC Discovery response: %s", body)
+	//log.Debugf(ctx, "XXX: Got OIDC Discovery response: %s", body)
 	//return nil, fmt.Errorf("XXX: Not implemented")
 
 	return oidc.NewProvider(ctx, b.cfg.issuerURL)
@@ -433,7 +433,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			authOpts = append(authOpts, oauth2.SetAuthURLParam("client_secret", secret))
 		}
 
-		log.Infof(context.Background(), "\nXXX: Calling DeviceAuth")
+		log.Infof(context.Background(), "XXX: Calling DeviceAuth")
 		response, err := session.oauth2Config.DeviceAuth(ctx, authOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
@@ -575,7 +575,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
-		log.Infof(context.Background(), "\nXXX: Calling DeviceAccessToken")
+		log.Infof(context.Background(), "XXX: Calling DeviceAccessToken")
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
 			log.Error(context.Background(), err.Error())
@@ -601,17 +601,17 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		// XXX: Enable again once we have a token with the required scopes
-		authInfo.UserInfo = info.User{Name: session.username}
-		//authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
-		//if err != nil {
-		//	log.Error(context.Background(), err.Error())
-		//	return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
-		//}
-		//
-		//if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-		//	log.Warningf(context.Background(), "User %q is not in the list of allowed users", authInfo.UserInfo.Name)
-		//	return AuthDenied, errorMessage{Message: "permission denied"}
-		//}
+		//authInfo.UserInfo = info.User{Name: session.username}
+		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
+		if err != nil {
+			log.Error(context.Background(), err.Error())
+			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+		}
+
+		if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+			log.Warningf(context.Background(), "User %q is not in the list of allowed users", authInfo.UserInfo.Name)
+			return AuthDenied, errorMessage{Message: "permission denied"}
+		}
 
 		session.authInfo["auth_info"] = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
