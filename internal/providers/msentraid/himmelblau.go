@@ -166,7 +166,7 @@ func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clien
 		return fmt.Errorf("failed to enroll device: %d", int(ret))
 	}
 
-	log.Info(ctx, "Enrolled device with ID: %s", C.GoString(deviceID))
+	log.Infof(ctx, "Enrolled device with ID: %v", C.GoString(deviceID))
 
 	return nil
 }
@@ -204,7 +204,7 @@ func AcquireAccessTokenForGraphAPI(ctx context.Context, token *oauth2.Token) (st
 		return "", fmt.Errorf("failed to get access token: %d", int(ret))
 	}
 
-	log.Infof(ctx, "Acquired access token: %s", C.GoString(accessToken))
+	log.Infof(ctx, "Acquired access token: %v", C.GoString(accessToken))
 
 	return C.GoString(accessToken), nil
 }
