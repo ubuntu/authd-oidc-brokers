@@ -15,7 +15,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var ClientID string
+const edgeBrowserClientID = "d7b530a4-7680-4c23-a8bf-c52c121d2e87"
 
 var tpm *C.BoxedDynTpm
 var authValue *C.char
@@ -23,10 +23,19 @@ var loadableMachineKey *C.LoadableMachineKey
 var machineKey *C.MachineKey
 var brokerClientApp *C.BrokerClientApplication
 
+var appClientID string
+
 func init() {
+	var ret C.enum_MSAL_ERROR
+
+	ret = C.set_global_tracing_level(C.TRACE)
+	if ret != C.SUCCESS {
+		panic(fmt.Sprintf("failed to set global tracing level: %d", int(ret)))
+	}
+
 	// An optional TPM Transmission Interface. If this parameter is NULL, a Soft Tpm is initialized.
 	var tcti_name *C.char
-	ret := C.tpm_init(tcti_name, &tpm)
+	ret = C.tpm_init(tcti_name, &tpm)
 	if ret != C.SUCCESS {
 		panic(fmt.Sprintf("failed to initialize TPM: %d", int(ret)))
 	}
@@ -45,21 +54,33 @@ func init() {
 	if ret != C.SUCCESS {
 		panic(fmt.Sprintf("failed to load machine key: %d", int(ret)))
 	}
-
-	ret = C.broker_init(nil, nil, nil, nil, &brokerClientApp)
-	if ret != C.SUCCESS {
-		panic(fmt.Sprintf("failed to initialize BrokerClientApplication: %d", int(ret)))
-	}
 }
 
 func (p Provider) SupportsDeviceRegistration() bool {
 	return true
 }
 
+var registered = false
+
 func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clientID, tenantID, domain string) error {
-	ret := C.set_global_tracing_level(C.TRACE)
+	if registered {
+		return nil
+	}
+
+	appClientID = clientID
+
+	var ret C.enum_MSAL_ERROR
+
+	authority := C.CString("https://login.microsoftonline.com/" + tenantID)
+	ret = C.broker_init(
+		authority,
+		C.CString(clientID),
+		nil,
+		nil,
+		&brokerClientApp,
+	)
 	if ret != C.SUCCESS {
-		return fmt.Errorf("failed to set global tracing level: %d", int(ret))
+		panic(fmt.Sprintf("failed to initialize BrokerClientApplication: %d", int(ret)))
 	}
 
 	//var tpm *C.BoxedDynTpm
@@ -168,6 +189,8 @@ func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clien
 
 	log.Infof(ctx, "Enrolled device with ID: %v", C.GoString(deviceID))
 
+	registered = true
+
 	return nil
 }
 
@@ -176,11 +199,12 @@ func AcquireAccessTokenForGraphAPI(ctx context.Context, token *oauth2.Token) (st
 	var userToken *C.UserToken
 	defer C.user_token_free(userToken)
 	scopes := []*C.char{
-		C.CString("openid"),
-		C.CString("profile"),
-		C.CString("offline_access"),
-		C.CString("GroupMember.Read.All"),
-		C.CString("User.Read"),
+		//C.CString("openid"),
+		//C.CString("profile"),
+		//C.CString("offline_access"),
+		//C.CString("GroupMember.Read.All"),
+		//C.CString("User.Read"),
+		C.CString("https://graph.microsoft.com/.default"),
 	}
 	scopesPtr := (**C.char)(unsafe.Pointer(&scopes[0]))
 	ret := C.broker_acquire_token_by_refresh_token(
@@ -189,6 +213,14 @@ func AcquireAccessTokenForGraphAPI(ctx context.Context, token *oauth2.Token) (st
 		scopesPtr,
 		C.int(len(scopes)),
 		nil,
+		// We have to use the edge browser client ID here, else the GET request to the
+		// https://login.microsoftonline.com/<tenant-ID>/oauth2/v2.0/authorize endpoint
+		// fails with "AADSTS500113: no reply address is registered for the application".
+		// Note: Alternatively, we could use `nil` here if we also use `nil` as the client ID
+		// in the `broker_init` call, which means that the user doesn't even have to register
+		// an OIDC app in Entra. However, that has the effect that we can't fetch the groups
+		// of the user.
+		C.CString(edgeBrowserClientID),
 		tpm,
 		machineKey,
 		&userToken,

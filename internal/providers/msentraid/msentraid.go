@@ -127,6 +127,7 @@ func (p Provider) GetUserInfo(ctx context.Context, token *oauth2.Token, idToken 
 		Expiry:       token.Expiry,
 		ExpiresIn:    token.ExpiresIn,
 	}
+	newToken = newToken.WithExtra(token.Extra("scope"))
 
 	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
 	if providerMetadata["msgraph_host"] != nil {
@@ -185,13 +186,14 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	log.Debug(context.Background(), "Getting user groups from Microsoft Graph API")
 
 	// Check if the token has the GroupMember.Read.All scope
-	scopes, err := p.getTokenScopes(token)
-	if err != nil {
-		return nil, err
-	}
-	if !slices.Contains(scopes, "GroupMember.Read.All") {
-		return nil, providerErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
-	}
+	// XXX: Enable this again
+	//scopes, err := p.getTokenScopes(token)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//if !slices.Contains(scopes, "GroupMember.Read.All") {
+	//	return nil, providerErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
+	//}
 
 	cred := azureTokenCredential{token: token}
 	auth, err := msgraphauth.NewAzureIdentityAuthenticationProvider(cred)
@@ -288,12 +290,19 @@ func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.G
 	var securityGroups []msgraphmodels.Groupable
 	for _, group := range groups {
 		if !isSecurityGroup(group) {
-			groupNamePtr := group.GetDisplayName()
-			if groupNamePtr == nil {
-				log.Debugf(context.Background(), "Removing unnamed non-security group")
-				continue
+			var s string
+			if groupNamePtr := group.GetDisplayName(); groupNamePtr != nil {
+				s = *groupNamePtr
+			} else if description := group.GetDescription(); description != nil {
+				s = *description
+			} else if uniqueName := group.GetUniqueName(); uniqueName != nil {
+				s = *uniqueName
 			}
-			log.Debugf(context.Background(), "Removing non-security group %s", *groupNamePtr)
+			if s == "" {
+				log.Debugf(context.Background(), "Removing unnamed non-security group")
+			} else {
+				log.Debugf(context.Background(), "Removing non-security group %s", s)
+			}
 			continue
 		}
 		securityGroups = append(securityGroups, group)
