@@ -54,7 +54,7 @@ parts:
     build-packages:
       - cargo-c
     override-build: |
-      cargo cbuild --release --target-dir target --lib     
+      cargo cbuild --release --target-dir target --lib --features "broker,changepassword,on_behalf_of"
       echo "Installing libhimmelblau.so and himmelblau.h"
       # Rust uses `unknown-linux-gnu` in the target, but snap uses `linux-gnu`
       ARCH_DIR="${CRAFT_ARCH_TRIPLET_BUILD_FOR//-linux-gnu/-unknown-linux-gnu}"

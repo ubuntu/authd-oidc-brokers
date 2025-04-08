@@ -600,6 +600,25 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
 		}
 
+		// XXX: Perform device registration if the provider is msentraid
+		if msentraidProvider, ok := b.provider.(msentraid.Provider); ok {
+			// Extract the tenant ID from the issuer URL
+			// https://login.microsoftonline.com/8de88d99-6d0f-44d7-a8a5-925b012e5940/v2.0
+			// -> 8de88d99-6d0f-44d7-a8a5-925b012e5940
+			tenantID := strings.Split(strings.TrimPrefix(b.cfg.issuerURL, "https://login.microsoftonline.com/"), "/")[0]
+			nameParts := strings.Split(session.username, "@")
+			if len(nameParts) != 2 {
+				log.Errorf(context.Background(), "username is not in the format <username>@<domain>: %s", session.username)
+				return AuthDenied, errorMessage{Message: "username is not in the format <username>@<domain>"}
+			}
+			domain := nameParts[1]
+			err = msentraidProvider.RegisterDevice(ctx, authInfo.Token, b.cfg.clientID, tenantID, domain)
+			if err != nil {
+				log.Error(context.Background(), err.Error())
+				return AuthDenied, errorMessage{Message: "could not register device"}
+			}
+		}
+
 		// XXX: Enable again once we have a token with the required scopes
 		//authInfo.UserInfo = info.User{Name: session.username}
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
