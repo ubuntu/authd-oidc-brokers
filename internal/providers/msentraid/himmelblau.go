@@ -9,6 +9,8 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"unsafe"
 
 	"github.com/ubuntu/authd/log"
@@ -153,14 +155,14 @@ func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clien
 
 	var attrs *C.EnrollAttrs
 	// TODO: Memory leak because attrs are not freed?
-	deviceDisplayName := C.CString("My Ubuntu Device")
 	cDomain := C.CString(domain)
+
 	ret = C.enroll_attrs_init(
 		cDomain,
-		deviceDisplayName,
+		C.CString(hostname()),
 		nil,
 		0,
-		nil,
+		C.CString(osVersion()),
 		&attrs,
 	)
 	if ret != C.SUCCESS {
@@ -192,6 +194,30 @@ func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clien
 	registered = true
 
 	return nil
+}
+
+func hostname() string {
+	name, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return name
+}
+
+// osVersion gets the pretty name of the OS release from the system
+func osVersion() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "unknown"
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			return strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), "\"")
+		}
+	}
+
+	return "unknown"
 }
 
 func AcquireAccessTokenForGraphAPI(ctx context.Context, token *oauth2.Token) (string, error) {
