@@ -76,7 +76,7 @@ func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clien
 	authority := C.CString("https://login.microsoftonline.com/" + tenantID)
 	ret = C.broker_init(
 		authority,
-		C.CString(clientID),
+		nil, //C.CString(clientID),
 		nil,
 		nil,
 		&brokerClientApp,
@@ -94,7 +94,7 @@ func (p Provider) RegisterDevice(ctx context.Context, token *oauth2.Token, clien
 		C.CString(hostname()),
 		nil,
 		0,
-		C.CString(osVersion()),
+		C.CString(OsVersion()),
 		&attrs,
 	)
 	if ret != C.SUCCESS {
@@ -136,8 +136,8 @@ func hostname() string {
 	return name
 }
 
-// osVersion gets the pretty name of the OS release from the system
-func osVersion() string {
+// OsVersion gets the pretty name of the OS release from the system
+func OsVersion() string {
 	data, err := os.ReadFile("/etc/os-release")
 	if err != nil {
 		return "unknown"
