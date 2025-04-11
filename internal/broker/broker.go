@@ -152,6 +152,8 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
 	defer decorate.OnError(&err, "could not create new session for user %q", username)
 
+	log.Errorf(context.Background(), "XXX: osVersion: %s", msentraid.OsVersion())
+
 	sessionID = uuid.New().String()
 	s := session{
 		username: username,
