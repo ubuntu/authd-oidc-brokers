@@ -585,9 +585,11 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
 		}
 
-		if err = b.provider.CheckTokenScopes(t); err != nil {
-			log.Warningf(context.Background(), "error checking token scopes: %s", err)
-		}
+		// TODO: We can't check the scopes here anymore, because the access token used to fetch the groups is now
+		//       obtained in GetUserInfo.
+		//if err = b.provider.CheckTokenScopes(t); err != nil {
+		//	log.Warning(context.Background(), err.Error())
+		//}
 
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
@@ -622,8 +624,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			}
 		}
 
-		// XXX: Enable again once we have a token with the required scopes
-		//authInfo.UserInfo = info.User{Name: session.username}
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			log.Error(context.Background(), err.Error())
