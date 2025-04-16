@@ -179,6 +179,8 @@ func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string)
 type tokenOptions struct {
 	username string
 	issuer   string
+	home     string
+	shell    string
 	groups   []info.Group
 
 	expired             bool
@@ -246,6 +248,12 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 				{Name: "saved-remote-group", UGID: "12345"},
 				{Name: "saved-local-group", UGID: ""},
 			},
+		}
+		if options.home != "" {
+			tok.UserInfo.Home = options.home
+		}
+		if options.shell != "" {
+			tok.UserInfo.Shell = options.shell
 		}
 		if options.groups != nil {
 			tok.UserInfo.Groups = options.groups

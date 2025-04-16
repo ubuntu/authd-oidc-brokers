@@ -412,6 +412,8 @@ func TestIsAuthenticated(t *testing.T) {
 		dontWaitForFirstCall bool
 		readOnlyDataDir      bool
 		wantGroups           []info.Group
+		wantHome             string
+		wantShell            string
 		wantNextAuthModes    []string
 	}{
 		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstSecret: "-", wantSecondCall: true},
@@ -481,6 +483,12 @@ func TestIsAuthenticated(t *testing.T) {
 			firstMode:                   authmodes.Password,
 			token:                       &tokenOptions{},
 			forceProviderAuthentication: true,
+		},
+		"Home_and_shell_are_not_overwritten_when_user_info_is_refreshed": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{home: "/home/old-home", shell: "/bin/old-shell"},
+			wantHome:  "/home/old-home",
+			wantShell: "/bin/old-shell",
 		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
@@ -671,7 +679,7 @@ func TestIsAuthenticated(t *testing.T) {
 					require.ElementsMatch(t, tc.wantNextAuthModes, nextAuthModes, "Next auth modes should match")
 				}
 
-				if tc.wantGroups != nil {
+				if tc.wantGroups != nil || tc.wantHome != "" || tc.wantShell != "" {
 					type userInfoMsgType struct {
 						UserInfo info.User `json:"userinfo"`
 					}
@@ -679,7 +687,16 @@ func TestIsAuthenticated(t *testing.T) {
 					err = json.Unmarshal([]byte(data), &userInfoMsg)
 					require.NoError(t, err, "Failed to unmarshal user info message")
 					userInfo := userInfoMsg.UserInfo
-					require.ElementsMatch(t, tc.wantGroups, userInfo.Groups, "Groups should match")
+
+					if tc.wantGroups != nil {
+						require.ElementsMatch(t, tc.wantGroups, userInfo.Groups, "Groups should match")
+					}
+					if tc.wantHome != "" {
+						require.Equal(t, tc.wantHome, userInfo.Home, "Home should match")
+					}
+					if tc.wantShell != "" {
+						require.Equal(t, tc.wantShell, userInfo.Shell, "Shell should match")
+					}
 				}
 			}()
 
