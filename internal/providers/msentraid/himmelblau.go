@@ -160,9 +160,9 @@ func AcquireAccessTokenForGraphAPI(ctx context.Context, token *oauth2.Token) (st
 		//C.CString("openid"),
 		//C.CString("profile"),
 		//C.CString("offline_access"),
-		//C.CString("GroupMember.Read.All"),
+		C.CString("GroupMember.Read.All"),
 		//C.CString("User.Read"),
-		C.CString("https://graph.microsoft.com/.default"),
+		//C.CString("https://graph.microsoft.com/.default"),
 	}
 	scopesPtr := (**C.char)(unsafe.Pointer(&scopes[0]))
 	ret := C.broker_acquire_token_by_refresh_token(
@@ -178,7 +178,7 @@ func AcquireAccessTokenForGraphAPI(ctx context.Context, token *oauth2.Token) (st
 		// in the `broker_init` call, which means that the user doesn't even have to register
 		// an OIDC app in Entra. However, that has the effect that we can't fetch the groups
 		// of the user.
-		C.CString(edgeBrowserClientID),
+		C.CString("f7128cd7-b23a-4086-bf5c-7d4ba710e707"), //C.CString(edgeBrowserClientID),
 		tpm,
 		machineKey,
 		&userToken,

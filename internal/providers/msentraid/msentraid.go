@@ -9,10 +9,12 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
@@ -65,27 +67,32 @@ func (p Provider) AuthOptions() []oauth2.AuthCodeOption {
 
 // CheckTokenScopes checks if the token has the required scopes.
 func (p Provider) CheckTokenScopes(token *oauth2.Token) error {
-	scopes, err := p.getTokenScopes(token)
-	if err != nil {
-		return err
-	}
-
-	var missingScopes []string
-	for _, s := range p.expectedScopes {
-		if !slices.Contains(scopes, s) {
-			missingScopes = append(missingScopes, s)
-		}
-	}
-	if len(missingScopes) > 0 {
-		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
-	}
 	return nil
+	//scopes, err := p.getTokenScopes(token)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//var missingScopes []string
+	//for _, s := range p.expectedScopes {
+	//	if !slices.Contains(scopes, s) {
+	//		missingScopes = append(missingScopes, s)
+	//	}
+	//}
+	//if len(missingScopes) > 0 {
+	//	return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
+	//}
+	//return nil
 }
 
-func (p Provider) getTokenScopes(token *oauth2.Token) ([]string, error) {
-	scopesStr, ok := token.Extra("scope").(string)
+func (p Provider) getTokenScopes(token *jwt.Token) ([]string, error) {
+	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
+		return nil, fmt.Errorf("failed to cast token claims to MapClaims: %v", token.Claims)
+	}
+	scopesStr, ok := claims["scp"].(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to cast token claims to string: %v", claims["scp"])
 	}
 	return strings.Split(scopesStr, " "), nil
 }
@@ -94,6 +101,7 @@ func (p Provider) getTokenScopes(token *oauth2.Token) ([]string, error) {
 func (p Provider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
 	return map[string]interface{}{
 		"scope": token.Extra("scope"),
+		"scp":   token.Extra("scp"),
 	}
 }
 
@@ -115,19 +123,16 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
 func (p Provider) GetUserInfo(ctx context.Context, token *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
-	accessToken, err := AcquireAccessTokenForGraphAPI(ctx, token)
+	accessTokenStr, err := AcquireAccessTokenForGraphAPI(ctx, token)
 	if err != nil {
 		return info.User{}, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %v", err)
 	}
-	// Clone the OAuth2 token and set the new access token
-	newToken := &oauth2.Token{
-		AccessToken:  accessToken,
-		TokenType:    token.TokenType,
-		RefreshToken: token.RefreshToken,
-		Expiry:       token.Expiry,
-		ExpiresIn:    token.ExpiresIn,
+
+	// Parse without verifying
+	accessToken, _, err := new(jwt.Parser).ParseUnverified(accessTokenStr, jwt.MapClaims{})
+	if err != nil {
+		return info.User{}, fmt.Errorf("failed to parse access token: %v", err)
 	}
-	newToken = newToken.WithExtra(token.Extra("scope"))
 
 	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
 	if providerMetadata["msgraph_host"] != nil {
@@ -149,7 +154,7 @@ func (p Provider) GetUserInfo(ctx context.Context, token *oauth2.Token, idToken 
 		return info.User{}, err
 	}
 
-	userGroups, err := p.getGroups(newToken, msgraphHost)
+	userGroups, err := p.getGroups(accessToken, msgraphHost)
 	if err != nil {
 		return info.User{}, err
 	}
@@ -182,18 +187,18 @@ func (p Provider) userClaims(idToken info.Claimer) (claims, error) {
 }
 
 // getGroups access the Microsoft Graph API to get the groups the user is a member of.
-func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Group, error) {
+func (p Provider) getGroups(token *jwt.Token, msgraphHost string) ([]info.Group, error) {
 	log.Debug(context.Background(), "Getting user groups from Microsoft Graph API")
 
 	// Check if the token has the GroupMember.Read.All scope
-	// XXX: Enable this again
-	//scopes, err := p.getTokenScopes(token)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if !slices.Contains(scopes, "GroupMember.Read.All") {
-	//	return nil, providerErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
-	//}
+	scopes, err := p.getTokenScopes(token)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(scopes, "GroupMember.Read.All") {
+		log.Warningf(context.Background(), "XXX: Scopes: %v", scopes)
+		return nil, providerErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
+	}
 
 	cred := azureTokenCredential{token: token}
 	auth, err := msgraphauth.NewAzureIdentityAuthenticationProvider(cred)
@@ -398,14 +403,23 @@ func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string
 }
 
 type azureTokenCredential struct {
-	token *oauth2.Token
+	token *jwt.Token
 }
 
 // GetToken creates an azcore.AccessToken from an oauth2.Token.
 func (c azureTokenCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	claims, ok := c.token.Claims.(jwt.MapClaims)
+	if !ok {
+		return azcore.AccessToken{}, fmt.Errorf("failed to cast token claims to MapClaims: %v", c.token.Claims)
+	}
+	expiresOn, ok := claims["exp"].(float64)
+	if !ok {
+		return azcore.AccessToken{}, fmt.Errorf("failed to cast token expiration to float64: %v", claims["exp"])
+	}
+
 	return azcore.AccessToken{
-		Token:     c.token.AccessToken,
-		ExpiresOn: c.token.Expiry,
+		Token:     c.token.Raw,
+		ExpiresOn: time.Unix(int64(expiresOn), 0),
 	}, nil
 }
 
