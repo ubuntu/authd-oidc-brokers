@@ -644,7 +644,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		// Try to refresh the user info
-		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
+		userInfo, err := b.refreshUserInfo(ctx, session, &authInfo, authInfo.UserInfo)
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
 			log.Error(context.Background(), err.Error())
@@ -836,6 +836,19 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.UserInfo = oldToken.UserInfo
 	return t, nil
+}
+
+func (b *Broker) refreshUserInfo(ctx context.Context, session *session, t *token.AuthCachedInfo, oldUserInfo info.User) (info.User, error) {
+	userInfo, err := b.fetchUserInfo(ctx, session, t)
+	if err != nil {
+		return info.User{}, fmt.Errorf("could not refresh user info: %w", err)
+	}
+
+	// Don't overwrite the shell and home directory, because those should be configurable locally.
+	userInfo.Shell = oldUserInfo.Shell
+	userInfo.Home = oldUserInfo.Home
+
+	return userInfo, nil
 }
 
 func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.AuthCachedInfo) (userInfo info.User, err error) {
