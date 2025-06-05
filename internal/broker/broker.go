@@ -521,7 +521,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	// Decrypt secret if present.
 	secret, err := decodeRawSecret(b.privateKey, rawSecret)
 	if err != nil {
-		log.Error(context.Background(), err.Error())
+		log.Errorf(context.Background(), "could not decode secret: %s", err)
 		return AuthRetry, errorMessage{Message: "could not decode secret"}
 	}
 
@@ -536,17 +536,20 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		if response.Expiry.IsZero() {
 			response.Expiry = time.Now().Add(time.Hour)
+			log.Debugf(context.Background(), "Device code does not have an expiry time, using default of %s", response.Expiry)
+		} else {
+			log.Debugf(context.Background(), "Device code expiry time: %s", response.Expiry)
 		}
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
-			log.Error(context.Background(), err.Error())
+			log.Errorf(context.Background(), "could not authenticate user remotely: %s", err)
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
 		}
 
 		if err = b.provider.CheckTokenScopes(t); err != nil {
-			log.Warning(context.Background(), err.Error())
+			log.Warningf(context.Background(), "error checking token scopes: %s", err)
 		}
 
 		rawIDToken, ok := t.Extra("id_token").(string)
@@ -559,13 +562,13 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
 		if err != nil {
-			log.Error(context.Background(), err.Error())
+			log.Errorf(context.Background(), "could not get provider metadata: %s", err)
 			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
 		}
 
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
-			log.Error(context.Background(), err.Error())
+			log.Errorf(context.Background(), "could not fetch user info: %s", err)
 			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 
