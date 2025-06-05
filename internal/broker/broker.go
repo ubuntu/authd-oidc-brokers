@@ -536,6 +536,9 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		if response.Expiry.IsZero() {
 			response.Expiry = time.Now().Add(time.Hour)
+			log.Debugf(context.Background(), "Device code does not have an expiry time, using default of %s", response.Expiry)
+		} else {
+			log.Debugf(context.Background(), "Device code expiry time: %s", response.Expiry)
 		}
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
