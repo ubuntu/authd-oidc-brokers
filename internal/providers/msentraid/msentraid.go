@@ -220,6 +220,18 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 			continue
 		}
 
+		// Store directory extension attributes, if any.
+		additionalData := msGroup.GetAdditionalData()
+		if additionalData != nil {
+			group.ExtraFields = make(map[string]any)
+			for k, v := range additionalData {
+				// Directory extension attributes start with "extension_"
+				if strings.HasPrefix(k, "extension_") && v != nil {
+					group.ExtraFields[k] = v
+				}
+			}
+		}
+
 		// Microsoft groups are case-insensitive, see https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-name-rules
 		group.Name = strings.ToLower(msGroupName)
 
