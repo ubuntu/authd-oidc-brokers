@@ -778,7 +778,10 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 func (b *Broker) UserPreCheck(username string) (string, error) {
 	found := false
 	for _, suffix := range b.cfg.allowedSSHSuffixes {
-		if strings.HasSuffix(username, suffix) {
+		if suffix == "" {
+			continue
+		}
+		if suffix == "*" || strings.HasSuffix(username, suffix) {
 			found = true
 			break
 		}
