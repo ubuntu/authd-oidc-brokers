@@ -90,6 +90,7 @@ parts:
       echo "CGO_LDFLAGS: $CGO_LDFLAGS"
 
       go mod download all
+      go mod vendor
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
 
   config:
