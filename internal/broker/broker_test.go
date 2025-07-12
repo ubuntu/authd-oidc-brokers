@@ -391,6 +391,10 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionOffline              bool
 		username                    string
 		forceProviderAuthentication bool
+		userDoesNotBecomeOwner      bool
+		allUsersAllowed             bool
+		extraGroups                 []string
+		ownerExtraGroups            []string
 
 		firstMode                string
 		firstSecret              string
@@ -481,6 +485,29 @@ func TestIsAuthenticated(t *testing.T) {
 			firstMode:                   authmodes.Password,
 			token:                       &tokenOptions{},
 			forceProviderAuthentication: true,
+		},
+		"Extra_groups_configured": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			groupsReturnedByProvider: []info.Group{{Name: "remote-group"}},
+			extraGroups:              []string{"extra-group"},
+			wantGroups:               []info.Group{{Name: "remote-group"}, {Name: "extra-group"}},
+		},
+		"Owner_extra_groups_configured": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			groupsReturnedByProvider: []info.Group{{Name: "remote-group"}},
+			ownerExtraGroups:         []string{"owner-group"},
+			wantGroups:               []info.Group{{Name: "remote-group"}, {Name: "owner-group"}},
+		},
+		"Owner_extra_groups_configured_but_user_does_not_become_owner": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			groupsReturnedByProvider: []info.Group{{Name: "remote-group"}},
+			userDoesNotBecomeOwner:   true,
+			allUsersAllowed:          true,
+			ownerExtraGroups:         []string{"owner-group"},
+			wantGroups:               []info.Group{{Name: "remote-group"}},
 		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
@@ -582,8 +609,11 @@ func TestIsAuthenticated(t *testing.T) {
 				Config:                      broker.Config{DataDir: dataDir},
 				getUserInfoFails:            tc.getUserInfoFails,
 				ownerAllowed:                true,
-				firstUserBecomesOwner:       true,
+				firstUserBecomesOwner:       !tc.userDoesNotBecomeOwner,
+				allUsersAllowed:             tc.allUsersAllowed,
 				forceProviderAuthentication: tc.forceProviderAuthentication,
+				extraGroups:                 tc.extraGroups,
+				ownerExtraGroups:            tc.ownerExtraGroups,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
@@ -1162,8 +1192,6 @@ func TestUserPreCheck(t *testing.T) {
 		username        string
 		allowedSuffixes []string
 		homePrefix      string
-
-		wantErr bool
 	}{
 		"Successfully_allow_username_with_matching_allowed_suffix": {
 			username:        "user@allowed",
@@ -1172,25 +1200,38 @@ func TestUserPreCheck(t *testing.T) {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@other", "@something", "@allowed"},
 		},
+		"Successfully_allow_username_if_suffix_is_allow_all": {
+			username:        "user@doesnotmatter",
+			allowedSuffixes: []string{"*"},
+		},
+		"Successfully_allow_username_if_suffix_has_asterisk": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"*@allowed"},
+		},
+		"Successfully_allow_username_ignoring_empty_string_in_config": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"@anothersuffix", "", "@allowed"},
+		},
 		"Return_userinfo_with_correct_homedir_after_precheck": {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@allowed"},
 			homePrefix:      "/home/allowed/",
 		},
 
-		"Error_when_username_does_not_match_allowed_suffix": {
+		"Empty_userinfo_if_username_does_not_match_allowed_suffix": {
 			username:        "user@notallowed",
 			allowedSuffixes: []string{"@allowed"},
-			wantErr:         true,
 		},
-		"Error_when_username_does_not_match_any_of_the_allowed_suffixes": {
+		"Empty_userinfo_if_username_does_not_match_any_of_the_allowed_suffixes": {
 			username:        "user@notallowed",
-			allowedSuffixes: []string{"@other", "@something", "@allowed"},
-			wantErr:         true,
+			allowedSuffixes: []string{"@other", "@something", "@allowed", ""},
 		},
-		"Error_when_no_allowed_suffixes_are_provided": {
+		"Empty_userinfo_if_no_allowed_suffixes_are_provided": {
 			username: "user@allowed",
-			wantErr:  true,
+		},
+		"Empty_userinfo_if_allowed_suffixes_has_only_empty_string": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{""},
 		},
 	}
 	for name, tc := range tests {
@@ -1204,10 +1245,6 @@ func TestUserPreCheck(t *testing.T) {
 			})
 
 			got, err := b.UserPreCheck(tc.username)
-			if tc.wantErr {
-				require.Error(t, err, "UserPreCheck should have returned an error")
-				return
-			}
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
 
 			golden.CheckOrUpdate(t, got)
