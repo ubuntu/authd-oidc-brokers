@@ -97,8 +97,8 @@ func (p *Provider) registerDevice(ctx context.Context, token *oauth2.Token, tena
 
 	var transportKey *C.LoadableMsOapxbcRsaKey
 	defer C.loadable_ms_oapxbc_rsa_key_free(transportKey)
-	var certKey *C.LoadableIdentityKey
-	defer C.loadable_identity_key_free(certKey)
+	var certKey *C.LoadableMsDeviceEnrolmentKey
+	defer C.loadable_ms_device_enrollment_key_free(certKey)
 	var deviceID *C.char
 	defer C.free(unsafe.Pointer(deviceID))
 	ret = C.broker_enroll_device(
