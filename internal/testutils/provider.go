@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -226,7 +225,7 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 		claims := jwt.MapClaims{
 			"iss":                serverURL,
 			"sub":                "test-user-id",
-			"aud":                "test-client-id",
+			"aud":                consts.MicrosoftBrokerAppID,
 			"exp":                9999999999,
 			"name":               "test-user",
 			"preferred_username": "test-user-preferred-username@email.com",
@@ -360,26 +359,6 @@ type MockProvider struct {
 	numCallsLock sync.Mutex
 }
 
-// CheckTokenScopes checks if the token has the required scopes.
-func (p *MockProvider) CheckTokenScopes(token *oauth2.Token) error {
-	scopesStr, ok := token.Extra("scope").(string)
-	if !ok {
-		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
-	}
-
-	scopes := strings.Split(scopesStr, " ")
-	var missingScopes []string
-	for _, s := range consts.DefaultScopes {
-		if !slices.Contains(scopes, s) {
-			missingScopes = append(missingScopes, s)
-		}
-	}
-	if len(missingScopes) > 0 {
-		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
-	}
-	return nil
-}
-
 // AdditionalScopes returns the additional scopes required by the provider.
 func (p *MockProvider) AdditionalScopes() []string {
 	if p.Scopes != nil {
@@ -407,7 +386,7 @@ func (p *MockProvider) GetMetadata(provider *oidc.Provider) (map[string]interfac
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
+func (p *MockProvider) GetUserInfo(ctx context.Context, clientID string, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
 	if p.GetUserInfoFails {
 		return info.User{}, errors.New("error requested in the mock")
 	}
