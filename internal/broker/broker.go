@@ -579,6 +579,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return AuthNext, nil
 
 	case authmodes.Password:
+		// TODO: Remove the support for the old encrypted token
 		useOldEncryptedToken, err := token.UseOldEncryptedToken(session.tokenPath, session.passwordPath, session.oldEncryptedTokenPath)
 		if err != nil {
 			log.Error(context.Background(), err.Error())
