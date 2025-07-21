@@ -774,7 +774,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 			// Ensure that the token content is generic to avoid golden file conflicts
 			if _, err := os.Stat(b.TokenPathForSession(sessionID)); err == nil {
-				err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
+				err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely a token"), 0600)
 				require.NoError(t, err, "Teardown: Failed to write generic token file")
 			}
 			passwordPath := b.PasswordFilepathForSession(sessionID)
@@ -925,7 +925,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			for _, sessionID := range []string{firstSession, secondSession} {
 				// Ensure that the token content is generic to avoid golden file conflicts
 				if _, err := os.Stat(b.TokenPathForSession(sessionID)); err == nil {
-					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
+					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely a token"), 0600)
 					require.NoError(t, err, "Teardown: Failed to write generic token file")
 				}
 				passwordPath := b.PasswordFilepathForSession(sessionID)
