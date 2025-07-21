@@ -237,6 +237,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
 				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
+				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
@@ -350,6 +352,8 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
 				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
 				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
+				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
