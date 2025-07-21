@@ -778,7 +778,7 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 			continue
 		}
 
-		// If suffx is only "*", TrimPrefix will return the empty string and that works for the 'match all' case also.
+		// If suffix is only "*", TrimPrefix will return the empty string and that works for the 'match all' case also.
 		suffix = strings.TrimPrefix(suffix, "*")
 		if strings.HasSuffix(username, suffix) {
 			found = true
