@@ -27,6 +27,8 @@ const (
 	clientIDKey = "client_id"
 	// clientSecret is the optional client secret for this client.
 	clientSecret = "client_secret"
+	// registerDevice is the key in the config file for the setting that indicates whether the device should be registered.
+	registerDevice = "register_device"
 
 	// usersSection is the section name in the config file for the users and broker specific configuration.
 	usersSection = "users"
@@ -73,6 +75,7 @@ type userConfig struct {
 	issuerURL    string
 
 	forceProviderAuthentication bool
+	registerDevice              bool
 
 	allowedUsers          map[string]struct{}
 	allUsersAllowed       bool
@@ -201,10 +204,18 @@ func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
 		cfg.issuerURL = oidc.Key(issuerKey).String()
 		cfg.clientID = oidc.Key(clientIDKey).String()
 		cfg.clientSecret = oidc.Key(clientSecret).String()
+
 		if oidc.HasKey(forceProviderAuthenticationKey) {
 			cfg.forceProviderAuthentication, err = oidc.Key(forceProviderAuthenticationKey).Bool()
 			if err != nil {
 				return cfg, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
+			}
+		}
+
+		if oidc.HasKey(registerDevice) {
+			cfg.registerDevice, err = oidc.Key(registerDevice).Bool()
+			if err != nil {
+				return cfg, fmt.Errorf("error parsing '%s': %w", registerDevice, err)
 			}
 		}
 	}
