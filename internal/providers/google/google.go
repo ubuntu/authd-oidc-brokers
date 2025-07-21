@@ -30,6 +30,16 @@ func (Provider) AdditionalScopes() []string {
 	return []string{}
 }
 
+// SupportsDeviceRegistration returns false, as the Google provider does not support device registration.
+func (Provider) SupportsDeviceRegistration() bool {
+	return false
+}
+
+// IsTokenForDeviceRegistration returns false, as the Google provider does not support device registration.
+func (Provider) IsTokenForDeviceRegistration(_ *oauth2.Token) (bool, error) {
+	return false, nil
+}
+
 // MaybeRegisterDevice is a no-op for the Google provider, because Google does not support device registration.
 func (Provider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string) error {
 	return nil

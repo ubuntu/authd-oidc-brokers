@@ -45,7 +45,8 @@ const (
 
 // Provider is the Microsoft Entra ID provider implementation.
 type Provider struct {
-	expectedScopes []string
+	expectedScopes              []string
+	needsAccessTokenForGraphAPI bool
 
 	// Used to skip acquiring the access token for the Microsoft Graph API in tests.
 	skipAccessTokenForGraphAPI bool
@@ -120,19 +121,22 @@ func (p *Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{},
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
 func (p *Provider) GetUserInfo(ctx context.Context, clientID string, token *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
-	var accessToken *jwt.Token
-	if !p.skipAccessTokenForGraphAPI {
-		accessTokenStr, err := acquireAccessTokenForGraphAPI(ctx, clientID, token)
+	var err error
+
+	accessTokenStr := token.AccessToken
+	if p.needsAccessTokenForGraphAPI && !p.skipAccessTokenForGraphAPI {
+		accessTokenStr, err = acquireAccessTokenForGraphAPI(ctx, clientID, token)
 		if err != nil {
 			return info.User{}, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %v", err)
 		}
+	}
+	log.Debugf(context.Background(), "XXX: access token: %s", accessTokenStr)
 
-		// Parse the access token without signature verification, because we're not the audience of the token (that's
-		// the Microsoft Graph API) and we don't use it for authentication, but only to access the Microsoft Graph API.
-		accessToken, _, err = new(jwt.Parser).ParseUnverified(accessTokenStr, jwt.MapClaims{})
-		if err != nil {
-			return info.User{}, fmt.Errorf("failed to parse access token: %v", err)
-		}
+	// Parse the access token without signature verification, because we're not the audience of the token (that's
+	// the Microsoft Graph API) and we don't use it for authentication, but only to access the Microsoft Graph API.
+	accessToken, _, err := new(jwt.Parser).ParseUnverified(accessTokenStr, jwt.MapClaims{})
+	if err != nil {
+		return info.User{}, fmt.Errorf("failed to parse access token: %v", err)
 	}
 
 	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
@@ -408,25 +412,34 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 	return nil
 }
 
-// MaybeRegisterDevice checks if the device is already registered and registers it if not.
-func (p *Provider) MaybeRegisterDevice(ctx context.Context, token *oauth2.Token, username, issuerURL string) error {
+// SupportsDeviceRegistration checks if the provider supports device registration.
+func (p *Provider) SupportsDeviceRegistration() bool {
+	// The Microsoft Entra ID provider supports device registration.
+	return true
+}
+
+// IsTokenForDeviceRegistration checks if the token is for device registration.
+func (p *Provider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
 	accessToken, _, err := new(jwt.Parser).ParseUnverified(token.AccessToken, jwt.MapClaims{})
 	if err != nil {
-		return fmt.Errorf("failed to parse access token: %v", err)
+		return false, fmt.Errorf("failed to parse access token: %v", err)
 	}
 
 	appID, err := p.getAppID(accessToken)
 	if err != nil {
-		return fmt.Errorf("failed to get app ID from access token: %v", err)
-	}
-	if appID != consts.MicrosoftBrokerAppID {
-		// The token is not for the Microsoft Broker app, so we can't register the device.
-		// This is expected if the token was acquired with authd-msentraid-broker <= 0.3.0,
-		// which did not support device registration.
-		return nil
+		return false, fmt.Errorf("failed to get app ID from access token: %v", err)
 	}
 
+	return appID == consts.MicrosoftBrokerAppID, nil
+}
+
+// MaybeRegisterDevice checks if the device is already registered and registers it if not.
+func (p *Provider) MaybeRegisterDevice(ctx context.Context, token *oauth2.Token, username, issuerURL string) error {
 	// TODO: Check if the device is already registered, and if so, return early.
+
+	// If this function is called, it means that the token that we have is for device registration,
+	// so we can't use it to access the Microsoft Graph API.
+	p.needsAccessTokenForGraphAPI = true
 
 	// Extract the tenant ID from the issuer URL
 	// https://login.microsoftonline.com/8de88d99-6d0f-44d7-a8a5-925b012e5940/v2.0

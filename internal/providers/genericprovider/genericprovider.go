@@ -110,6 +110,16 @@ func (p GenericProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
 	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }
 
+// SupportsDeviceRegistration returns false, as the generic provider does not support device registration.
+func (p GenericProvider) SupportsDeviceRegistration() bool {
+	return false
+}
+
+// IsTokenForDeviceRegistration returns false, as the generic provider does not support device registration.
+func (p GenericProvider) IsTokenForDeviceRegistration(_ *oauth2.Token) (bool, error) {
+	return false, nil
+}
+
 // MaybeRegisterDevice is a no-op when no specific provider is in use.
 func (p GenericProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string) error {
 	return nil

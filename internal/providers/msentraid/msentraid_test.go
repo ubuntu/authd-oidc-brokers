@@ -6,10 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd/log"
+	"golang.org/x/oauth2"
 )
 
 func TestNew(t *testing.T) {
@@ -137,6 +141,56 @@ func TestGetUserInfo(t *testing.T) {
 			require.NoError(t, err, "GetUserInfo should not return an error")
 
 			golden.CheckOrUpdateYAML(t, got)
+		})
+	}
+}
+
+func TestIsTokenForDeviceRegistration(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		appID        string
+		invalidToken bool
+
+		want    bool
+		wantErr bool
+	}{
+		"Success_when_token_has_microsoft_broker_app_ID": {appID: consts.MicrosoftBrokerAppID, want: true},
+		"Success_when_token_has_other_app_ID":            {appID: "some-other-app-id", want: false},
+		"Success_when_token_has_empty_app_ID":            {appID: "", want: false},
+
+		"Error_when_token_has_no_app_ID": {appID: "-", wantErr: true},
+		"Error_when_token_is_invalid":    {invalidToken: true, wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			claims := jwt.MapClaims{"appid": tc.appID}
+			if tc.appID == "-" {
+				claims = jwt.MapClaims{}
+			}
+
+			accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+			accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+			require.NoError(t, err, "Failed to sign access token")
+
+			if tc.invalidToken {
+				accessTokenString = "invalid-token"
+			}
+
+			token := &oauth2.Token{AccessToken: accessTokenString}
+
+			p := msentraid.New()
+			got, err := p.IsTokenForDeviceRegistration(token)
+
+			if tc.wantErr {
+				require.Error(t, err, "IsTokenForDeviceRegistration should return an error")
+				return
+			}
+			require.NoError(t, err, "IsTokenForDeviceRegistration should not return an error")
+			require.Equal(t, tc.want, got, "IsTokenForDeviceRegistration should return the expected value")
 		})
 	}
 }

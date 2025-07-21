@@ -20,5 +20,7 @@ type Provider interface {
 	SupportedOIDCAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
 	IsTokenExpiredError(err oauth2.RetrieveError) bool
+	SupportsDeviceRegistration() bool
+	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
 	MaybeRegisterDevice(ctx context.Context, token *oauth2.Token, username, issuerURL string) error
 }
