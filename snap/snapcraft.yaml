@@ -57,7 +57,11 @@ parts:
     override-build: |
       go mod download all
       go mod vendor
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
+    after:
+      - version
   config:
     source: conf/
     source-type: local
