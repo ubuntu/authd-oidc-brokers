@@ -27,6 +27,7 @@ type brokerForTestConfig struct {
 	broker.Config
 	issuerURL                   string
 	forceProviderAuthentication bool
+	registerDevice              bool
 	allowedUsers                map[string]struct{}
 	allUsersAllowed             bool
 	ownerAllowed                bool
@@ -58,6 +59,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.forceProviderAuthentication {
 		cfg.SetForceProviderAuthentication(cfg.forceProviderAuthentication)
+	}
+	if cfg.registerDevice {
+		cfg.SetRegisterDevice(cfg.registerDevice)
 	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)
@@ -189,6 +193,7 @@ type tokenOptions struct {
 	username string
 	issuer   string
 	groups   []info.Group
+	version  string
 
 	expired             bool
 	noRefreshToken      bool
@@ -213,6 +218,13 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		options.username = ""
 	}
 
+	if options.version == "" {
+		options.version = consts.Version
+	}
+	if options.version == "-" {
+		options.version = ""
+	}
+
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"iss":                options.issuer,
 		"sub":                "saved-user-id",
@@ -232,6 +244,7 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 			RefreshToken: "refreshtoken",
 			Expiry:       time.Now().Add(1000 * time.Hour),
 		},
+		Version: options.version,
 	}
 
 	if options.expired {
