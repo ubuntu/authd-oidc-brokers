@@ -53,7 +53,7 @@ func New(name string) *App {
 			// First thing, initialize the log handler
 			log.InitJournalHandler(false)
 
-			// Command parsing has been successful. Returns to not print usage anymore.
+			// Command parsing has been successful, so don't print the usage message on errors anymore.
 			a.rootCmd.SilenceUsage = true
 
 			dataDir := filepath.Join("/var", "lib", name)
