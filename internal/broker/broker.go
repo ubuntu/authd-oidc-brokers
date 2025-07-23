@@ -29,6 +29,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
+	"golang.org/x/mod/semver"
 	"golang.org/x/oauth2"
 )
 
@@ -139,7 +140,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	b = &Broker{
 		cfg:        cfg,
 		provider:   opts.provider,
-		oidcCfg:    oidc.Config{ClientID: cfg.clientID},
+		oidcCfg:    oidc.Config{ClientID: consts.MicrosoftBrokerAppID},
 		privateKey: privateKey,
 
 		currentSessions:   make(map[string]session),
@@ -184,10 +185,10 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	if s.oidcServer != nil {
 		s.oauth2Config = oauth2.Config{
-			ClientID:     b.oidcCfg.ClientID,
+			ClientID:     consts.MicrosoftBrokerAppID,
 			ClientSecret: b.cfg.clientSecret,
 			Endpoint:     s.oidcServer.Endpoint(),
-			Scopes:       append(consts.DefaultScopes, b.provider.AdditionalScopes()...),
+			Scopes:       consts.MicrosoftBrokerAppScopes,
 		}
 	}
 
@@ -247,7 +248,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 func (b *Broker) availableAuthModes(session session) (availableModes []string, err error) {
 	if len(session.nextAuthModes) > 0 {
 		for _, mode := range session.nextAuthModes {
-			if !authModeIsAvailable(session, mode) {
+			if !b.authModeIsAvailable(session, mode) {
 				log.Infof(context.Background(), "Authentication mode %q is not available", mode)
 				continue
 			}
@@ -271,7 +272,7 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 		// when it's not necessary.
 		modes := append([]string{authmodes.Password}, b.provider.SupportedOIDCAuthModes()...)
 		for _, mode := range modes {
-			if authModeIsAvailable(session, mode) {
+			if b.authModeIsAvailable(session, mode) {
 				availableModes = append(availableModes, mode)
 			}
 		}
@@ -279,10 +280,14 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 	}
 }
 
-func authModeIsAvailable(session session, authMode string) bool {
+func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 	switch authMode {
 	case authmodes.Password:
-		return tokenExists(session) && passwordFileExists(session)
+		// TODO: We might want to display a message to the user if the token
+		//       exists but can't be used for device registration.
+		return tokenExists(session) &&
+			passwordFileExists(session) &&
+			(!b.cfg.registerDevice || tokenCanBeUsedForDeviceRegistration(session))
 	case authmodes.NewPassword:
 		return true
 	case authmodes.Device, authmodes.DeviceQr:
@@ -305,6 +310,24 @@ func passwordFileExists(session session) bool {
 		log.Warningf(context.Background(), "Could not check if local password file exists: %v", err)
 	}
 	return exists
+}
+
+func tokenCanBeUsedForDeviceRegistration(session session) bool {
+	authInfo, err := token.LoadAuthInfo(session.tokenPath)
+	if err != nil {
+		log.Warningf(context.Background(), "Could not check if token can be used for device registration: %v", err)
+		return false
+	}
+
+	if authInfo.Version == "" {
+		// Versions before 0.4.0 did not store the version in the cached token,
+		// and the tokens from those versions cannot be used for device registration.
+		return false
+	}
+
+	// Return true if the token version is 0.4.0-0 or higher.
+	// The "-0" suffix makes sure that we also return true for pre-releases like "0.4.0-pre1".
+	return semver.Compare("v"+authInfo.Version, "v0.4.0-0") >= 0
 }
 
 func (b *Broker) authModesSupportedByUI(supportedUILayouts []map[string]string) (supportedModes []string) {
@@ -483,8 +506,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		return AuthCancelled, string(msg), ctx.Err()
 	}
 
-	switch access {
-	case AuthRetry:
+	if access == AuthRetry {
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
 			access = AuthDenied
@@ -544,10 +566,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		if err != nil {
 			log.Errorf(context.Background(), "could not authenticate user remotely: %s", err)
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
-		}
-
-		if err = b.provider.CheckTokenScopes(t); err != nil {
-			log.Warningf(context.Background(), "error checking token scopes: %s", err)
 		}
 
 		rawIDToken, ok := t.Extra("id_token").(string)
@@ -858,12 +876,19 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, errors.New("session is in offline mode")
 	}
 
+	if b.cfg.registerDevice {
+		err = b.provider.MaybeRegisterDevice(ctx, t.Token, session.username, b.cfg.issuerURL)
+		if err != nil {
+			return info.User{}, fmt.Errorf("could not register device: %v", err)
+		}
+	}
+
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken, t.ProviderMetadata)
+	userInfo, err = b.provider.GetUserInfo(ctx, b.cfg.clientID, t.Token, idToken, t.ProviderMetadata)
 	if err != nil {
 		return info.User{}, err
 	}

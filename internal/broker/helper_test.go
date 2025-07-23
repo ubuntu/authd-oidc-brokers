@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
@@ -26,6 +27,7 @@ type brokerForTestConfig struct {
 	broker.Config
 	issuerURL                   string
 	forceProviderAuthentication bool
+	registerDevice              bool
 	allowedUsers                map[string]struct{}
 	allUsersAllowed             bool
 	ownerAllowed                bool
@@ -57,6 +59,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.forceProviderAuthentication {
 		cfg.SetForceProviderAuthentication(cfg.forceProviderAuthentication)
+	}
+	if cfg.registerDevice {
+		cfg.SetRegisterDevice(cfg.registerDevice)
 	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)
@@ -188,6 +193,7 @@ type tokenOptions struct {
 	username string
 	issuer   string
 	groups   []info.Group
+	version  string
 
 	expired             bool
 	noRefreshToken      bool
@@ -212,10 +218,17 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		options.username = ""
 	}
 
+	if options.version == "" {
+		options.version = consts.Version
+	}
+	if options.version == "-" {
+		options.version = ""
+	}
+
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"iss":                options.issuer,
 		"sub":                "saved-user-id",
-		"aud":                "test-client-id",
+		"aud":                consts.MicrosoftBrokerAppID,
 		"exp":                9999999999,
 		"name":               "test-user",
 		"preferred_username": "test-user-preferred-username@email.com",
@@ -231,6 +244,7 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 			RefreshToken: "refreshtoken",
 			Expiry:       time.Now().Add(1000 * time.Hour),
 		},
+		Version: options.version,
 	}
 
 	if options.expired {

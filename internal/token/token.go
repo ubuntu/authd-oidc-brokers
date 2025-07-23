@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
@@ -19,6 +20,7 @@ type AuthCachedInfo struct {
 	RawIDToken       string
 	ProviderMetadata map[string]interface{}
 	UserInfo         info.User
+	Version          string
 }
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
@@ -28,6 +30,7 @@ func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, provider provider
 		Token:       token,
 		RawIDToken:  rawIDToken,
 		ExtraFields: provider.GetExtraFields(token),
+		Version:     consts.Version,
 	}
 }
 
