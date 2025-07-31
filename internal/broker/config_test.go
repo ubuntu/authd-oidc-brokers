@@ -353,3 +353,10 @@ func TestRegisterOwner(t *testing.T) {
 
 	golden.CheckOrUpdateFileTree(t, outDir)
 }
+
+func FuzzParseConfig(f *testing.F) {
+	p := &testutils.MockProvider{}
+	f.Fuzz(func(t *testing.T, a []byte) {
+		_, _ = parseConfig(a, nil, p)
+	})
+}
