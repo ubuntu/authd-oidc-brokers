@@ -3,8 +3,9 @@ package info
 
 // Group represents the group information that is fetched by the broker.
 type Group struct {
-	Name string `json:"name"`
-	UGID string `json:"ugid"`
+	Name        string         `json:"name"`
+	UGID        string         `json:"ugid"`
+	ExtraFields map[string]any `json:"extra_fields,omitempty"`
 }
 
 // User represents the user information obtained from the provider.
