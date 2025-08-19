@@ -13,6 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build libhimmelblau
+        # The code sanity check fails if himmelblau.h does not exist, so we generate it first.
+        run: go generate ./internal/providers/msentraid/...
+
       - name: Go code sanity check
         uses: canonical/desktop-engineering/gh-actions/go/code-sanity@main
         with:
@@ -24,6 +31,8 @@ jobs:
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -41,6 +50,9 @@ jobs:
           go install github.com/AlekSi/gocov-xml@latest
           go install github.com/axw/gocov/gocov@latest
           dotnet tool install -g dotnet-reportgenerator-globaltool
+
+      - name: Build libhimmelblau
+        run: go generate ./internal/providers/msentraid/...
 
       - name: Prepare tests artifacts path
         run: |
