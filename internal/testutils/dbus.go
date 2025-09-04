@@ -74,9 +74,9 @@ func StartSystemBusMock() (func(), error) {
 		_ = os.RemoveAll(tmp)
 
 		if !set {
-			os.Unsetenv("DBUS_SYSTEM_BUS_ADDRESS")
+			_ = os.Unsetenv("DBUS_SYSTEM_BUS_ADDRESS")
 		} else {
-			os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", prev)
+			_ = os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", prev)
 		}
 	}, nil
 }
@@ -98,5 +98,5 @@ func GetSystemBusConnection(t *testing.T) (*dbus.Conn, error) {
 // isRunning checks if the system bus mock is running.
 func isRunning() bool {
 	busAddr := os.Getenv("DBUS_SYSTEM_BUS_ADDRESS")
-	return !(busAddr == "" || busAddr == defaultSystemBusAddress)
+	return busAddr != "" && busAddr != defaultSystemBusAddress
 }
