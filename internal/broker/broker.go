@@ -542,6 +542,10 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
 
+		// The default interval is 5 seconds, which means the user has to wait up to 5 seconds after
+		// successful authentication. We're reducing the interval to 1 second to improve UX a bit.
+		response.Interval = 1
+
 		log.Debug(ctx, "Polling to exchange device code for token...")
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
