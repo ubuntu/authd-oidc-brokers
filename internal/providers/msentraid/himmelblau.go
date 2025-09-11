@@ -34,6 +34,15 @@ var (
 	ErrDeviceDisabled = fmt.Errorf("device is disabled in Microsoft Entra ID, please contact your administrator")
 )
 
+// TokenAcquisitionError is returned when an error occurs while acquiring a token via libhimmelblau.
+type TokenAcquisitionError struct {
+	msg string
+}
+
+func (e TokenAcquisitionError) Error() string {
+	return e.msg
+}
+
 func init() {
 	var err *C.MSAL_ERROR
 
@@ -325,7 +334,11 @@ func acquireAccessTokenForGraphAPI(ctx context.Context, clientID, tenantID strin
 		if slices.Contains(errorCodes, deviceDisabledErrorCode) {
 			return "", ErrDeviceDisabled
 		}
-		return "", fmt.Errorf("failed to acquire token by refresh token: %v", C.GoString(msalErr.msg))
+		// The token acquisition failed unexpectedly.
+		// One possible reason is that the device was deleted by an administrator in Entra ID.
+		// Unfortunately, Microsoft doesn't return a specific error code for that case,
+		// it returns the generic error "AADSTS50155: Device authentication failed".
+		return "", TokenAcquisitionError{msg: fmt.Sprintf("error acquiring access token using refresh token: %v", C.GoString(msalErr.msg))}
 	}
 
 	var accessToken *C.char
