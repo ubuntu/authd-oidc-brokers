@@ -286,6 +286,7 @@ Log In With Remote User Through GDM: QR Code
 
 Start Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${domain}
+    PlatformVideoInput.Match Text    Not listed    120
     Move Pointer To Not Listed
     Left Button Click
 
