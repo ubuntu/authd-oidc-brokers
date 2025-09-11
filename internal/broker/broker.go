@@ -704,6 +704,18 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			log.Errorf(context.Background(), "Login failed: %s", err)
 			return AuthDenied, errorMessage{Message: err.Error()}
 		}
+		var tokenAcquisitionError msentraid.TokenAcquisitionError
+		if errors.As(err, &tokenAcquisitionError) {
+			log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
+			// The token acquisition failed unexpectedly.
+			// One possible reason is that the device was deleted by an administrator in Entra ID.
+			// In this case, the user can perform device authentication again to get a new token
+			// and register the device again, allowing the user to log in.
+			msg := "Authentication failed due to a token issue. Please try again using device authentication."
+			// TODO: Check what happens if we're in offline mode
+			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+			return AuthNext, errorMessage{Message: msg}
+		}
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
 			log.Errorf(context.Background(), "could not fetch user info: %s", err)

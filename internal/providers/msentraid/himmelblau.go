@@ -28,7 +28,8 @@ import (
 const deviceDisabledErrorCode = 135011
 
 var (
-	tpm *C.BoxedDynTpm
+	tpm         *C.BoxedDynTpm
+	tpmInitOnce sync.Once
 
 	brokerClientApp         *C.BrokerClientApplication
 	brokerClientAppInitOnce sync.Once
@@ -37,23 +38,49 @@ var (
 	ErrDeviceDisabled = fmt.Errorf("device is disabled in Microsoft Entra ID, please contact your administrator")
 )
 
-func init() {
-	var err *C.MSAL_ERROR
+// TokenAcquisitionError is returned when an error occurs while acquiring a token via libhimmelblau.
+type TokenAcquisitionError struct {
+	msg string
+}
 
-	err = C.set_global_tracing_level(C.TRACE)
-	if err != nil {
-		panic(fmt.Sprintf("failed to set global tracing level: %v", C.GoString(err.msg)))
-	}
+func (e TokenAcquisitionError) Error() string {
+	return e.msg
+}
 
-	// An optional TPM Transmission Interface. If this parameter is NULL, a soft TPM is initialized.
-	var tctiName *C.char
-	err = C.tpm_init(tctiName, &tpm)
-	if err != nil {
-		panic(fmt.Sprintf("failed to initialize TPM: %v", C.GoString(err.msg)))
-	}
+func ensureTPMInitialized() (err error) {
+	tpmInitOnce.Do(func() {
+		filters := []string{"warn"}
+		logLevel := log.GetLevel()
+		if logLevel <= log.DebugLevel {
+			log.Debug(context.Background(), "Setting libhimmelblau tracing level to DEBUG")
+			filters = append(filters, "himmelblau=debug")
+		} else if logLevel <= log.InfoLevel {
+			filters = append(filters, "himmelblau=info")
+		}
+
+		msalErr := C.set_module_tracing_filter(C.CString(strings.Join(filters, ",")))
+		if msalErr != nil {
+			err = fmt.Errorf("failed to set libhimmelblau tracing level: %v", C.GoString(msalErr.msg))
+			return
+		}
+
+		// An optional TPM Transmission Interface. If this parameter is NULL, a soft TPM is initialized.
+		var tctiName *C.char
+		msalErr = C.tpm_init(tctiName, &tpm)
+		if msalErr != nil {
+			err = fmt.Errorf("failed to initialize TPM: %v", C.GoString(msalErr.msg))
+			return
+		}
+	})
+
+	return err
 }
 
 func ensureBrokerClientAppInitialized(tenantID string, data *deviceRegistrationData) (err error) {
+	if err = ensureTPMInitialized(); err != nil {
+		return err
+	}
+
 	brokerClientAppInitOnce.Do(func() {
 		var msalErr *C.MSAL_ERROR
 
@@ -338,7 +365,11 @@ func acquireAccessTokenForGraphAPI(ctx context.Context, clientID, tenantID strin
 			log.Error(ctx, C.GoString(msalErr.msg))
 			return "", ErrDeviceDisabled
 		}
-		return "", fmt.Errorf("failed to acquire token by refresh token: %v", C.GoString(msalErr.msg))
+		// The token acquisition failed unexpectedly.
+		// One possible reason is that the device was deleted by an administrator in Entra ID.
+		// Unfortunately, Microsoft doesn't return a specific error code for that case,
+		// it returns the generic error "AADSTS50155: Device authentication failed".
+		return "", TokenAcquisitionError{msg: fmt.Sprintf("error acquiring access token using refresh token: %v", C.GoString(msalErr.msg))}
 	}
 
 	var accessToken *C.char
@@ -348,7 +379,7 @@ func acquireAccessTokenForGraphAPI(ctx context.Context, clientID, tenantID strin
 		return "", fmt.Errorf("failed to get access token: %v", C.GoString(msalErr.msg))
 	}
 
-	log.Infof(ctx, "Acquired access token: %v", C.GoString(accessToken))
+	log.Info(ctx, "Acquired access token")
 
 	return C.GoString(accessToken), nil
 }
