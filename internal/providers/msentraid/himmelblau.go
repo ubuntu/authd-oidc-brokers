@@ -35,7 +35,7 @@ var (
 	brokerClientAppInitOnce sync.Once
 
 	// ErrDeviceDisabled is returned when the device is disabled in Microsoft Entra ID.
-	ErrDeviceDisabled = fmt.Errorf("device is disabled in Microsoft Entra ID, please contact your administrator")
+	ErrDeviceDisabled = fmt.Errorf("device is disabled in Microsoft Entra ID")
 )
 
 // TokenAcquisitionError is returned when an error occurs while acquiring a token via libhimmelblau.
