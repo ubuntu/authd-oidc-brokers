@@ -545,7 +545,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	case <-authDone:
 	case <-ctx.Done():
 		// We can ignore the error here since the message is constant.
-		msg, _ := json.Marshal(errorMessage{Message: "authentication request cancelled"})
+		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
 		return AuthCancelled, string(msg), ctx.Err()
 	}
 
@@ -553,7 +553,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
 			access = AuthDenied
-			iadResponse = errorMessage{Message: "maximum number of attempts reached"}
+			iadResponse = errorMessage{Message: "Maximum number of authentication attempts reached"}
 		}
 	}
 
@@ -573,9 +573,11 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	return access, data, nil
 }
 
-func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
-	defer decorateErrorMessage(&data, "authentication failure")
+func unexpectedErrMsg(msg string) errorMessage {
+	return errorMessage{Message: fmt.Sprintf("An unexpected error occurred: %s. Please report this error on https://github.com/ubuntu/authd/issues", msg)}
+}
 
+func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
 	rawSecret, ok := authData[AuthDataSecret]
 	if !ok {
 		rawSecret = authData[AuthDataSecretOld]
@@ -585,7 +587,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	secret, err := decodeRawSecret(b.privateKey, rawSecret)
 	if err != nil {
 		log.Errorf(context.Background(), "could not decode secret: %s", err)
-		return AuthRetry, errorMessage{Message: "could not decode secret"}
+		return AuthRetry, unexpectedErrMsg("could not decode secret")
 	}
 
 	var authInfo *token.AuthCachedInfo
@@ -593,8 +595,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	case authmodes.Device, authmodes.DeviceQr:
 		response := session.deviceAuthResponse
 		if response == nil {
-			log.Error(context.Background(), "could not get device auth response")
-			return AuthDenied, errorMessage{Message: "could not get required response"}
+			log.Error(context.Background(), "device auth response is not set")
+			return AuthDenied, unexpectedErrMsg("device auth response is not set")
 		}
 
 		if response.Expiry.IsZero() {
@@ -613,15 +615,15 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		log.Debug(ctx, "Polling to exchange device code for token...")
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
-			log.Errorf(context.Background(), "could not authenticate user remotely: %s", err)
-			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
+			log.Errorf(context.Background(), "Error retrieving access token: %s", err)
+			return AuthRetry, errorMessage{Message: "Error retrieving access token. Please try again."}
 		}
 		log.Debug(ctx, "Exchanged device code for token.")
 
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
-			log.Error(context.Background(), "could not get ID token")
-			return AuthDenied, errorMessage{Message: "could not get ID token"}
+			log.Error(context.Background(), "token response does not contain an ID token")
+			return AuthDenied, unexpectedErrMsg("token response does not contain an ID token")
 		}
 
 		authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
@@ -629,18 +631,18 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
 		if err != nil {
 			log.Errorf(context.Background(), "could not get provider metadata: %s", err)
-			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
+			return AuthDenied, unexpectedErrMsg("could not get provider metadata")
 		}
 
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, authInfo)
 		if err != nil {
 			log.Errorf(context.Background(), "could not fetch user info: %s", err)
-			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+			return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
 		}
 
 		if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
 			log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-			return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
+			return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 		}
 
 		// Store the auth info in the session so that we can use it when handling the
@@ -654,17 +656,17 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		ok, err := password.CheckPassword(secret, session.passwordPath)
 		if err != nil {
 			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: "could not check password file"}
+			return AuthDenied, unexpectedErrMsg("could not check password")
 		}
 		if !ok {
 			log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
-			return AuthRetry, errorMessage{Message: "incorrect password"}
+			return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
 		}
 
 		authInfo, err = token.LoadAuthInfo(session.tokenPath)
 		if err != nil {
 			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: "could not load stored token"}
+			return AuthDenied, unexpectedErrMsg("could not load stored token")
 		}
 
 		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
@@ -678,8 +680,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		if b.cfg.forceProviderAuthentication && session.isOffline {
-			log.Error(context.Background(), "Login failed: force_provider_authentication is enabled, but the provider is not reachable")
-			return AuthDenied, errorMessage{Message: "could not refresh token: provider is not reachable"}
+			log.Error(context.Background(), "Remote authentication failed: force_provider_authentication is enabled, but the identity provider is not reachable")
+			return AuthDenied, errorMessage{Message: "Remote authentication failed: identity provider is not reachable"}
 		}
 
 		// Refresh the token if we're online even if the token has not expired
@@ -689,11 +691,11 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
 				log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-				return AuthNext, errorMessage{Message: "refresh token expired, please authenticate again using device authentication"}
+				return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again using device authentication."}
 			}
 			if err != nil {
-				log.Error(context.Background(), err.Error())
-				return AuthDenied, errorMessage{Message: "could not refresh token"}
+				log.Errorf(context.Background(), "Failed to refresh token: %s", err)
+				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
 			}
 		}
 
@@ -702,7 +704,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		if errors.Is(err, msentraid.ErrDeviceDisabled) {
 			// The device is disabled, deny login
 			log.Errorf(context.Background(), "Login failed: %s", err)
-			return AuthDenied, errorMessage{Message: err.Error()}
+			return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
 		}
 		var tokenAcquisitionError msentraid.TokenAcquisitionError
 		if errors.As(err, &tokenAcquisitionError) {
@@ -711,15 +713,15 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			// One possible reason is that the device was deleted by an administrator in Entra ID.
 			// In this case, the user can perform device authentication again to get a new token
 			// and register the device again, allowing the user to log in.
-			msg := "Authentication failed due to a token issue. Please try again using device authentication."
 			// TODO: Check what happens if we're in offline mode
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+			msg := "Authentication failed due to a token issue. Please try again using device authentication."
 			return AuthNext, errorMessage{Message: msg}
 		}
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
 			log.Errorf(context.Background(), "could not fetch user info: %s", err)
-			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+			return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
 		}
 		if err != nil {
 			// We couldn't fetch the user info, but we have a valid cached one.
@@ -730,20 +732,20 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 	case authmodes.NewPassword:
 		if secret == "" {
-			return AuthRetry, errorMessage{Message: "empty secret"}
+			return AuthRetry, unexpectedErrMsg("empty secret")
 		}
 
 		// This mode must always come after an authentication mode, so we should have auth info from the previous mode
 		// stored in the session.
 		authInfo = session.authInfo
 		if authInfo == nil {
-			log.Error(context.Background(), "could not get required information")
-			return AuthDenied, errorMessage{Message: "could not get required information"}
+			log.Error(context.Background(), "auth info is not set")
+			return AuthDenied, unexpectedErrMsg("auth info is not set")
 		}
 
 		if err = password.HashAndStorePassword(secret, session.passwordPath); err != nil {
-			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: "could not store password"}
+			log.Errorf(context.Background(), "Failed to store password: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store password")
 		}
 	}
 
@@ -752,13 +754,13 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			// The user is not allowed if we fail to create the owner-autoregistration file.
 			// Otherwise the owner might change if the broker is restarted.
 			log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
-			return AuthDenied, errorMessage{Message: "could not register the owner"}
+			return AuthDenied, unexpectedErrMsg("failed to assign the owner role")
 		}
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
 		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-		return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
+		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
 
 	// Add extra groups to the user info.
@@ -780,8 +782,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-		log.Error(context.Background(), err.Error())
-		return AuthDenied, errorMessage{Message: "could not cache user info"}
+		log.Errorf(context.Background(), "Failed to store token: %s", err)
+		return AuthDenied, unexpectedErrMsg("failed to store token")
 	}
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
@@ -981,19 +983,6 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 	}
 
 	return userInfo, err
-}
-
-// decorateErrorMessage decorates the isAuthenticatedDataResponse with the provided message, if it's an errorMessage.
-func decorateErrorMessage(data *isAuthenticatedDataResponse, msg string) {
-	if *data == nil {
-		return
-	}
-	errMsg, ok := (*data).(errorMessage)
-	if !ok {
-		return
-	}
-	errMsg.Message = fmt.Sprintf("%s: %s", msg, errMsg.Message)
-	*data = errMsg
 }
 
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
