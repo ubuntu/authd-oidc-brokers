@@ -627,6 +627,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
 
+		// Load existing device registration data if there is any, to avoid re-registering the device.
+		oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath)
+		if err == nil {
+			authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+		}
+
 		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
 		if err != nil {
 			log.Errorf(context.Background(), "could not get provider metadata: %s", err)
@@ -637,7 +643,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			authInfo.DeviceRegistrationData, err = b.provider.MaybeRegisterDevice(ctx, t,
 				session.username,
 				b.cfg.issuerURL,
-				nil,
+				authInfo.DeviceRegistrationData,
 			)
 			if err != nil {
 				log.Errorf(context.Background(), "error registering device: %s", err)
@@ -750,7 +756,13 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			// One possible reason is that the device was deleted by an administrator in Entra ID.
 			// In this case, the user can perform device authentication again to get a new token
 			// and register the device again, allowing the user to log in.
-			// TODO: Check what happens if we're in offline mode
+			// We delete the device registration data to cause device authentication to re-register the device.
+			authInfo.DeviceRegistrationData = nil
+			if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", err)
+				return AuthDenied, unexpectedErrMsg("failed to store token")
+			}
+
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			msg := "Authentication failed due to a token issue. Please try again using device authentication."
 			return AuthNext, errorMessage{Message: msg}
