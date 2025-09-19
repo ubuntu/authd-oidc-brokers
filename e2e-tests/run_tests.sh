@@ -21,6 +21,13 @@ BROKER_COMMON_DIR="${ROOT_DIR}/$BROKER/common"
 
 # Create directory for the test run
 TEST_RUN_DIR="/tmp/oidc-e2e-test-run"
+
+function test_folder_cleanup() {
+  rm -rf "$TEST_RUN_DIR"
+}
+
+trap test_folder_cleanup EXIT
+
 mkdir -p "${TEST_RUN_DIR}"
 cd "${TEST_RUN_DIR}"
 
@@ -32,7 +39,7 @@ ln -s "${BROKER_COMMON_DIR}" broker-common
 mkdir -p output
 
 # Read entire tests dir if arguments are not provided
-TESTS_TO_RUN="${TESTS_DIR}/*.robot"
+TESTS_TO_RUN=("${TESTS_DIR}"/*.robot)
 if [ -n "${1:-}" ]; then
     echo "Running specific test: ${1}"
     TESTS_TO_RUN="${TESTS_DIR}/$(basename "${1}")"
@@ -40,10 +47,10 @@ fi
 
 # Run the YARF tests
 test_results=()
-for test_file in $TESTS_TO_RUN; do
-    ln -s "${test_file}" .
-
+for test_file in "${TESTS_TO_RUN[@]}"; do
     test_name=$(basename "${test_file}")
+    ln -s "${test_file}" "${test_name}"
+
     echo "Running test: ${test_name}"
 
     echo "Resetting VM snapshots..."
@@ -77,12 +84,13 @@ for test_file in $TESTS_TO_RUN; do
     fi
 
     sleep 5  # Wait for the VM to stop
+
     if [ ${test_result} -ne 0 ]; then
         test_results+=("${test_name}: FAILED")
     else
         test_results+=("${test_name}: OK")
     fi
-    rm "${test_name}"
+
 done
 
 for result in "${test_results[@]}"; do
