@@ -22,7 +22,7 @@ Enable Edge Broker
     Close GNOME Terminal In Sudo Mode
 
 
-Disable Broker Snap
+Disable Broker And Purge Config
     Open GNOME Terminal In Sudo Mode
     Run Command In GNOME Terminal    snap stop authd-msentraid
     Run Command In GNOME Terminal    rm ${AUTHD_BROKER_CFG}
@@ -70,13 +70,14 @@ Select Provider
 
 Regenerate QR Code
     # As long as we are in the login process, we can regenerate the QR code
+    PlatformVideoInput.Match Text    Request new login code    30
     PlatformHid.Keys Combo    Return
     PlatformVideoInput.Match Text    https://microsoft.com/devicelogin    15
 
 
 Continue Log In With Remote User: Log In On Browser
     [Arguments]    ${username}    ${domain}
-# Wait until the verification URL and login code are displayed
+    # Wait until the verification URL and login code are displayed
     PlatformVideoInput.Match Text    https://microsoft.com/devicelogin
     # Read the user code.
     ${text} =    PlatformVideoInput.Read Text
@@ -286,7 +287,7 @@ Log In With Remote User Through GDM: QR Code
 
 Start Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${domain}
-    PlatformVideoInput.Match Text    Not listed    120
+    PlatformVideoInput.Match Text    Not listed    180
     Move Pointer To Not Listed
     Left Button Click
 
@@ -322,6 +323,7 @@ Continue Log In With Remote User Through GDM: Define Local Password
 
 Log In With Remote User Through GDM: Local Password
     [Arguments]    ${username}    ${domain}    ${local_password}
+    PlatformVideoInput.Match Text    Not listed    180
     Move Pointer To Not Listed
     Left Button Click
 
