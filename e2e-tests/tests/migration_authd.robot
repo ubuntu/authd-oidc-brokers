@@ -33,7 +33,7 @@ Check remote user is properly added to the system
     Check User Information    ${username}    ${domain}
     Get NSS Group Entries For Remote User    ${username}    ${domain}
     Check User Groups    ${username}    ${domain}    ${remote_group}
-    Close GNOME Terminal
+    Close Focused Window
 
 
 Log in with remote user with local password
@@ -41,7 +41,7 @@ Log in with remote user with local password
     Log In With Remote User Through CLI: Local Password    ${username}    ${domain}    ${local_password}
     Check That Remote User Can Run Sudo Commands    ${local_password}
     Log Out From Terminal Session
-    Close GNOME Terminal in sudo mode
+    Close GNOME Terminal In Sudo Mode
 
 
 Switch to the edge PPA for authd

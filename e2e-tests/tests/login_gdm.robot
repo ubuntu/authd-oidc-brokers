@@ -28,7 +28,7 @@ Check remote user is properly added to the system
     Check User Information    ${username}    ${domain}
     Get NSS Group Entries For Remote User    ${username}    ${domain}
     Check User Groups    ${username}    ${domain}    ${remote_group}
-    Close GNOME Terminal
+    Close Focused Window
     Log Out
 
 

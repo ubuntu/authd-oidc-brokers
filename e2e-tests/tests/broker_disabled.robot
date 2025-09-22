@@ -21,7 +21,7 @@ Log in with local user
 
 
 Disable broker
-    Disable Broker Snap
+    Disable Broker And Purge Config
 
 
 Ensure local sudo user can still log in

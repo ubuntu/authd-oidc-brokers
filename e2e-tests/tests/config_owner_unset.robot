@@ -29,7 +29,7 @@ Try to log in with remote user
     Open GNOME Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${domain}    ${local_password}
     Log Out From Terminal Session
-    Close GNOME Terminal
+    Close Focused Window
 
 
 Log in with remote user with local password

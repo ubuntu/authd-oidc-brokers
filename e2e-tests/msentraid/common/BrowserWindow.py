@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import signal
 import sys
 from time import sleep
 
@@ -21,12 +20,11 @@ class BrowserWindow(Gtk.Window):
             default_width=1024,
             default_height=768,
             border_width=0,
-            title="WebKit Sample Owner",
+            title="Authd Tests Browser Window",
         )
 
         self.web_view = WebKit.WebView()
         self.web_view.get_settings().enableJavascript = True
-        self.web_view.get_settings().set_javascript_can_access_clipboard(True)
         self.web_view.get_settings().set_javascript_can_open_windows_automatically(
             False
         )

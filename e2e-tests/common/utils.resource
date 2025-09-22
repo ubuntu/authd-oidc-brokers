@@ -39,28 +39,34 @@ Open GNOME Terminal In Sudo Mode
 
 
 Enter Sudo Mode In GNOME Terminal
+    PlatformHid.Type String    clear
+    PlatformHid.Keys Combo    Return
     PlatformHid.Type String    sudo -s
     PlatformHid.Keys Combo    Return
     PlatformVideoInput.Match Text    [sudo] password for ubuntu
     PlatformHid.Type String    ubuntu
     PlatformHid.Keys Combo    Return
-    PlatformVideoInput.Match Text    root@ubuntu:/home/ubuntu#    15
+    PlatformVideoInput.Match Text    root@ubuntu    15
     PlatformHid.Type String    clear
     PlatformHid.Keys Combo    Return
-    PlatformVideoInput.Match Text    root@ubuntu:/home/ubuntu#    15
+    PlatformVideoInput.Match Text    root@ubuntu    15
 
 
-Close GNOME Terminal
-    PlatformHid.Keys Combo    Control_L    Shift_L    W
+Close Focused Window
+    PlatformHid.Keys Combo    Alt_L   F4
 
 
 Close GNOME Terminal In Sudo Mode
+    PlatformHid.Type String    clear
+    PlatformHid.Keys Combo    Return
+    PlatformVideoInput.Match Text    root@ubuntu    15
     PlatformHid.Type String    exit
     PlatformHid.Keys Combo    Return
-    PlatformHid.Keys Combo    Control_L    Shift_L    W
+    Close Focused Window
 
 
 Log Out From Terminal Session
+    PlatformVideoInput.Match Text    @ubuntu    15
     PlatformHid.Type String    exit
     PlatformHid.Keys Combo    Return
 
@@ -86,8 +92,10 @@ Run Command In GNOME Terminal
     PlatformHid.Keys Combo    ${ampersand}
     PlatformHid.Keys Combo    space
     PlatformHid.Type String    echo cmd-finished
+    # Sleep a bit to ensure everything gets typed properly
     BuiltIn.Sleep    2    # hacky
     PlatformHid.Keys Combo    Return
+    # Sleep a bit to avoid matching the text on the command itself
     BuiltIn.Sleep    2    # hacky
     PlatformVideoInput.Match Text    cmd-finished    600
 
@@ -113,6 +121,7 @@ Start Application
 
 
 Cancel Operation
+    PlatformVideoInput.Match Text    @ubuntu    15
     PlatformHid.Keys Combo    Control_L    C
 
 
