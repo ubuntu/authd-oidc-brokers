@@ -171,10 +171,6 @@ def ascii_string_to_key_events(string):
     return [ord(ch) for ch in list(string)]
 
 
-def timeout_handler(signum, frame):
-    raise TimeoutError("Operation timed out")
-
-
 def wait_for_successful_text(webview, selector="h1.p-heading--4", retries=10, delay=1.0):
     js = f'''
         (function() {{
