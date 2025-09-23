@@ -12,7 +12,6 @@ ${AUTHD_COMMON_DIR}        ${CURDIR}/authd-common
 ${BROKER_COMMON_DIR}      ${CURDIR}/broker-common
 
 ${username}    %{E2E_USER}
-${domain}      %{E2E_DOMAIN}
 ${local_password}    qwer1234
 ${remote_group}    %{E2E_USER}-group
 
@@ -23,8 +22,8 @@ Log in with local user
 
 
 Fail to login if usernames do not match
-    Open GNOME Terminal
-    Start Log In With Remote User Through CLI: QR Code   different_user    ${domain}
+    Open Terminal
+    Start Log In With Remote User Through CLI: QR Code   different_user
     Select Provider
-    Continue Log In With Remote User: Log In On Browser   ${username}    ${domain}
+    Continue Log In With Remote User: Log In On External Browser   ${username}
     Check That User Information Can Not Be Fetched

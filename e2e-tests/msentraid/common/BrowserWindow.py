@@ -43,7 +43,7 @@ class BrowserWindow(Gtk.Window):
                 and event.type != Gdk.EventType.KEY_RELEASE
             ):
                 return
-            print(event, event.keyval)
+            print(f"event: ({event}, {event.keyval})")
             return False
 
         self.web_view.add_events(
@@ -191,7 +191,5 @@ if __name__ == "__main__":
 
     browser.send_key_taps([Gdk.KEY_Return])
     browser.wait_for_stable_page()
-
-    sleep(5)
 
     sys.exit(0)

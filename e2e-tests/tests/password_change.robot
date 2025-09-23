@@ -12,7 +12,6 @@ ${AUTHD_COMMON_DIR}        ${CURDIR}/authd-common
 ${BROKER_COMMON_DIR}      ${CURDIR}/broker-common
 
 ${username}    %{E2E_USER}
-${domain}      %{E2E_DOMAIN}
 ${local_password}    qwer1234
 ${new_password}    passwd1234
 ${remote_group}    %{E2E_USER}-group
@@ -24,16 +23,18 @@ Log in with local user
 
 
 Log in with remote user with device authentication
-    Open GNOME Terminal
-    Log In With Remote User Through CLI: QR Code    ${username}    ${domain}    ${local_password}
+    Open Terminal
+    Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
+    Log Out From Terminal Session
+    Close Focused Window
 
 
 Change Local Password Of Remote User
-    Open GNOME Terminal In Sudo Mode
-    Change Local Password Of Remote User    ${username}    ${domain}    ${local_password}    ${new_password}
-    Close GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
+    Change Local Password Of Remote User    ${username}    ${local_password}    ${new_password}
+    Close Terminal In Sudo Mode
 
 
 Log in with remote user with local password
-    Open GNOME Terminal In Sudo Mode
-    Log In With Remote User Through CLI: Local Password    ${username}    ${domain}    ${new_password}
+    Open Terminal In Sudo Mode
+    Log In With Remote User Through CLI: Local Password    ${username}    ${new_password}

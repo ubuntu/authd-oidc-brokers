@@ -12,7 +12,6 @@ ${AUTHD_COMMON_DIR}        ${CURDIR}/authd-common
 ${BROKER_COMMON_DIR}      ${CURDIR}/broker-common
 
 ${username}    %{E2E_USER}
-${domain}      %{E2E_DOMAIN}
 
 
 *** Test Cases ***
@@ -25,14 +24,14 @@ Disable authd
 
 
 Ensure local sudo user can still log in
-    Open GNOME Terminal
-    Enter Sudo Mode In GNOME Terminal
-    Close GNOME Terminal In Sudo Mode
+    Open Terminal
+    Enter Sudo Mode In Terminal
+    Close Terminal In Sudo Mode
 
 
 Check that remote user can't log in
-    Open GNOME Terminal In Sudo Mode
-    Try Log In With Remote User    ${username}    ${domain}
+    Open Terminal In Sudo Mode
+    Try Log In With Remote User    ${username}
     Check That Log In Fails Because Authd Is Disabled
     Cancel Operation
-    Close GNOME Terminal In Sudo Mode
+    Close Terminal In Sudo Mode
