@@ -12,7 +12,6 @@ ${AUTHD_COMMON_DIR}        ${CURDIR}/authd-common
 ${BROKER_COMMON_DIR}      ${CURDIR}/broker-common
 
 ${username}    %{E2E_USER}
-${domain}      %{E2E_DOMAIN}
 
 
 *** Test Cases ***
@@ -32,7 +31,7 @@ Ensure local sudo user can still log in
 
 Check that remote user can't log in
     Open GNOME Terminal In Sudo Mode
-    Try Log In With Remote User    ${username}    ${domain}
+    Try Log In With Remote User    ${username}
     Check That User Is Redirected To Local Broker
     Cancel Operation
     Close GNOME Terminal In Sudo Mode
