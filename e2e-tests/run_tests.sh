@@ -4,7 +4,6 @@ set -eu
 
 # Required environment variables:
 #    E2E_USER - The username to use for the tests
-#    E2E_DOMAIN - The domain to use for the tests
 #    E2E_PASSWORD - The password to use for the tests
 #    BROKER - The broker to test (e.g., msentraid)
 # Optional environment variables:
@@ -62,7 +61,6 @@ for test_file in $TESTS_TO_RUN; do
     echo "VM PID: ${VM_PID}"
 
     E2E_USER="$E2E_USER" \
-    E2E_DOMAIN="$E2E_DOMAIN" \
     E2E_PASSWORD="$E2E_PASSWORD" \
     yarf --outdir "output/${test_name}" --platform=Vnc . || true
 

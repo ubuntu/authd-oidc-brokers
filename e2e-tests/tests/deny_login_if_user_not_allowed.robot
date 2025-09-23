@@ -12,9 +12,6 @@ ${AUTHD_COMMON_DIR}        ${CURDIR}/authd-common
 ${BROKER_COMMON_DIR}      ${CURDIR}/broker-common
 
 ${username}    another-%{E2E_USER}
-${domain}      %{E2E_DOMAIN}
-${local_password}    qwer1234
-${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
@@ -23,8 +20,8 @@ Log in with local user
 
 
 Log in with remote user with device authentication
-    Open GNOME Terminal
-    Start Log In With Remote User Through CLI: QR Code    ${username}    ${domain}
+    Open Terminal
+    Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
-    Continue Log In With Remote User: Log In On Browser    ${username}    ${domain}
+    Continue Log In With Remote User: Log In On External Browser    ${username}
     Check That Remote User Is Not Allowed To Log In

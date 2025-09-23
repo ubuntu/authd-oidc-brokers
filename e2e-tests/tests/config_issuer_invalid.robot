@@ -12,7 +12,6 @@ ${AUTHD_COMMON_DIR}        ${CURDIR}/authd-common
 ${BROKER_COMMON_DIR}      ${CURDIR}/broker-common
 
 ${username}    %{E2E_USER}
-${domain}      %{E2E_DOMAIN}
 ${local_password}    qwer1234
 
 
@@ -26,7 +25,7 @@ Change Broker Configuration to an invalid issuer
 
 
 Try to log in with remote user when broker has invalid issuer
-    Open GNOME Terminal
-    Start Log In With Remote User Through CLI: QR Code    ${username}    ${domain}
+    Open Terminal
+    Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
     Check That Remote User Has No Available Authentication Modes
