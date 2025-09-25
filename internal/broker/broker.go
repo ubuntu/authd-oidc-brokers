@@ -732,7 +732,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		// If device registration is enabled, ensure that the device is registered.
-		if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+		if b.provider.SupportsDeviceRegistration() && !session.isOffline && b.cfg.registerDevice {
 			authInfo.DeviceRegistrationData, err = b.provider.MaybeRegisterDevice(ctx,
 				authInfo.Token,
 				session.username,
