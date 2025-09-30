@@ -23,7 +23,8 @@ var (
 	//nolint:errname // This is not a sentinel error.
 	brokerClientAppInitErr error
 
-	authorityBaseURL = "https://login.microsoftonline.com"
+	authorityBaseURL   = "https://login.microsoftonline.com"
+	authorityBaseURLMu sync.RWMutex
 )
 
 func ensureTPMInitialized() error {
@@ -58,7 +59,9 @@ func ensureBrokerClientAppInitialized(tenantID string, data *deviceRegistrationD
 	}
 
 	brokerClientAppInitOnce.Do(func() {
+		authorityBaseURLMu.RLock()
 		authority := authorityBaseURL + "/" + tenantID
+		authorityBaseURLMu.RUnlock()
 		var transportKey []byte
 		var certKey []byte
 		if data != nil {
