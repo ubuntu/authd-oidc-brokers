@@ -102,9 +102,10 @@ func TestGetUserInfo(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		invalidIDToken   bool
-		tokenScopes      []string
-		providerMetadata map[string]any
+		invalidIDToken     bool
+		tokenScopes        []string
+		providerMetadata   map[string]any
+		acquireAccessToken bool
 
 		groupEndpointHandler http.HandlerFunc
 
@@ -114,6 +115,7 @@ func TestGetUserInfo(t *testing.T) {
 		"Successfully_get_user_info_with_local_groups":             {groupEndpointHandler: localGroupHandler},
 		"Successfully_get_user_info_with_mixed_groups":             {groupEndpointHandler: mixedGroupHandler},
 		"Successfully_get_user_info_filtering_non_security_groups": {groupEndpointHandler: nonSecurityGroupHandler},
+		"Successfully_get_user_info_with_acquired_access_token":    {acquireAccessToken: true},
 
 		"Error_when_msgraph_host_is_invalid":             {providerMetadata: map[string]any{"msgraph_host": "invalid"}, wantErr: true},
 		"Error_when_id_token_claims_are_invalid":         {invalidIDToken: true, wantErr: true},
@@ -136,16 +138,25 @@ func TestGetUserInfo(t *testing.T) {
 			}
 
 			if tc.providerMetadata == nil {
-				msGraphMockURL, stopFunc := startMSGraphServerMock(tc.groupEndpointHandler)
-				t.Cleanup(stopFunc)
-				tc.providerMetadata = map[string]any{"msgraph_host": msGraphMockURL}
+				mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{
+					GroupEndpointHandler: tc.groupEndpointHandler,
+				})
+				t.Cleanup(cleanup)
+				tc.providerMetadata = map[string]any{"msgraph_host": mockServer.URL}
+			}
+
+			var deviceRegistrationData []byte
+			if tc.acquireAccessToken {
+				mockMSServerRegisterDeviceMu.Lock()
+				defer mockMSServerRegisterDeviceMu.Unlock()
+				deviceRegistrationData = maybeRegisterDevice(t)
 			}
 
 			p := msentraid.New()
-			p.SkipAccessTokenForGraphAPI()
+			p.SetNeedsAccessTokenForGraphAPI(tc.acquireAccessToken)
 			p.SetTokenScopesForGraphAPI(tc.tokenScopes)
 
-			got, err := p.GetUserInfo(context.Background(), "", "", token, idToken, tc.providerMetadata, nil)
+			got, err := p.GetUserInfo(context.Background(), "", "", token, idToken, tc.providerMetadata, deviceRegistrationData)
 			if tc.wantErr {
 				require.Error(t, err, "GetUserInfo should return an error")
 				return
@@ -208,7 +219,27 @@ func TestIsTokenForDeviceRegistration(t *testing.T) {
 }
 
 func TestMaybeRegisterDevice(t *testing.T) {
+	// Registering a device is not thread-safe, because libhimmelblau sets BrokerClientApplication.cert_key
+	// after successful device registration, and uses the same field in subsequent calls,
+	// e.g. in the acquire_token_by_refresh_token method. If the cert_key does not match the expected value,
+	// libhimmelblau returns "TPM error: Failed to load IdentityKey: Aes256GcmDecrypt".
+	mockMSServerRegisterDeviceMu.Lock()
+	defer mockMSServerRegisterDeviceMu.Unlock()
+
 	t.Parallel()
+
+	maybeRegisterDevice(t)
+}
+
+func maybeRegisterDevice(t *testing.T) []byte {
+	// Start the mock MS server (or reuse the existing one)
+	ensureMockMSServerForDeviceRegistration(t)
+	mockServer := mockMSServerForDeviceRegistration
+
+	// Make libhimmelblau use the mock MS server.
+	msentraid.SetAuthorityBaseURL(mockServer.URL)
+	err := os.Setenv("HIMMELBLAU_DISCOVERY_URL", mockServer.URL)
+	require.NoError(t, err, "Failed to set HIMMELBLAU_DISCOVERY_URL environment variable")
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{})
 	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
@@ -222,18 +253,18 @@ func TestMaybeRegisterDevice(t *testing.T) {
 	tenantID := "8de88d99-6d0f-44d7-a8a5-925b012e5940"
 	issuerURL := fmt.Sprintf("https://login.microsoftonline.com/%s/v2.0", tenantID)
 
-	mockMS, err := newMockMS(tenantID)
-	require.NoError(t, err, "Failed to start mock MS server")
-	t.Cleanup(mockMS.Close)
-
-	msentraid.SetAuthorityBaseURL(mockMS.Server.URL)
-	err = os.Setenv("HIMMELBLAU_DISCOVERY_URL", mockMS.Server.URL)
-	require.NoError(t, err, "Failed to set HIMMELBLAU_DISCOVERY_URL environment variable")
-
 	p := msentraid.New()
 
-	_, err = p.MaybeRegisterDevice(context.Background(), token, "user@example.com", issuerURL, nil)
+	registrationData, err := p.MaybeRegisterDevice(
+		context.Background(),
+		token,
+		"user@example.com",
+		issuerURL,
+		nil,
+	)
 	require.NoError(t, err, "MaybeRegisterDevice should not return an error")
+
+	return registrationData
 }
 
 func TestMain(m *testing.M) {
