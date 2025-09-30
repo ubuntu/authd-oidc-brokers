@@ -42,8 +42,6 @@ type Provider struct {
 	expectedScopes              []string
 	needsAccessTokenForGraphAPI bool
 
-	// Used to skip acquiring the access token for the Microsoft Graph API in tests.
-	skipAccessTokenForGraphAPI bool
 	// Used as the token scopes of the access token for the Microsoft Graph API in tests.
 	tokenScopesForGraphAPI []string
 }
@@ -118,7 +116,7 @@ func (p *Provider) GetUserInfo(ctx context.Context, clientID string, issuerURL s
 	var err error
 
 	accessTokenStr := token.AccessToken
-	if p.needsAccessTokenForGraphAPI && !p.skipAccessTokenForGraphAPI {
+	if p.needsAccessTokenForGraphAPI {
 		tenantID := tenantID(issuerURL)
 		accessTokenStr, err = acquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, deviceRegistrationData)
 		if errors.Is(err, ErrDeviceDisabled) {
