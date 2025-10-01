@@ -200,7 +200,7 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 
 	iniCfg, err := ini.Load(cfgContent, dropInContent...)
 	if err != nil {
-		return cfg, err
+		return userConfig{}, err
 	}
 
 	// Check if any of the keys still contain the placeholders.
@@ -212,7 +212,7 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 		}
 	}
 	if err != nil {
-		return cfg, fmt.Errorf("config file has invalid values, did you edit the config file?\n%w", err)
+		return userConfig{}, fmt.Errorf("config file has invalid values, did you edit the config file?\n%w", err)
 	}
 
 	oidc := iniCfg.Section(oidcSection)
@@ -224,14 +224,14 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 		if oidc.HasKey(forceProviderAuthenticationKey) {
 			cfg.forceProviderAuthentication, err = oidc.Key(forceProviderAuthenticationKey).Bool()
 			if err != nil {
-				return cfg, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
+				return userConfig{}, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
 			}
 		}
 
 		if oidc.HasKey(registerDevice) {
 			cfg.registerDevice, err = oidc.Key(registerDevice).Bool()
 			if err != nil {
-				return cfg, fmt.Errorf("error parsing '%s': %w", registerDevice, err)
+				return userConfig{}, fmt.Errorf("error parsing '%s': %w", registerDevice, err)
 			}
 		}
 	}
