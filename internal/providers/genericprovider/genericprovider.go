@@ -21,12 +21,6 @@ func New() GenericProvider {
 	return GenericProvider{}
 }
 
-// CheckTokenScopes should check the token scopes, but we're not sure
-// if there is a generic way to do this, so for now it's a no-op.
-func (p GenericProvider) CheckTokenScopes(token *oauth2.Token) error {
-	return nil
-}
-
 // AdditionalScopes returns the generic scopes required by the provider.
 func (p GenericProvider) AdditionalScopes() []string {
 	return []string{oidc.ScopeOfflineAccess}
@@ -48,7 +42,7 @@ func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interf
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p GenericProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
+func (p GenericProvider) GetUserInfo(_ context.Context, _, _ string, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}, _ []byte) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
@@ -114,4 +108,19 @@ func (p GenericProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
 	// TODO: This is an msentraid specific error code and description.
 	//       Change it to the ones from Google once we know them.
 	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
+}
+
+// SupportsDeviceRegistration returns false, as the generic provider does not support device registration.
+func (p GenericProvider) SupportsDeviceRegistration() bool {
+	return false
+}
+
+// IsTokenForDeviceRegistration returns false, as the generic provider does not support device registration.
+func (p GenericProvider) IsTokenForDeviceRegistration(_ *oauth2.Token) (bool, error) {
+	return false, nil
+}
+
+// MaybeRegisterDevice is a no-op when no specific provider is in use.
+func (p GenericProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string, _ []byte) ([]byte, error) {
+	return nil, nil
 }

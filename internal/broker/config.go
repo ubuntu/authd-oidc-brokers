@@ -27,6 +27,8 @@ const (
 	clientIDKey = "client_id"
 	// clientSecret is the optional client secret for this client.
 	clientSecret = "client_secret"
+	// registerDevice is the key in the config file for the setting that indicates whether the device should be registered.
+	registerDevice = "register_device"
 
 	// usersSection is the section name in the config file for the users and broker specific configuration.
 	usersSection = "users"
@@ -73,6 +75,7 @@ type userConfig struct {
 	issuerURL    string
 
 	forceProviderAuthentication bool
+	registerDevice              bool
 
 	allowedUsers          map[string]struct{}
 	allUsersAllowed       bool
@@ -197,7 +200,7 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 
 	iniCfg, err := ini.Load(cfgContent, dropInContent...)
 	if err != nil {
-		return cfg, err
+		return userConfig{}, err
 	}
 
 	// Check if any of the keys still contain the placeholders.
@@ -209,7 +212,7 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 		}
 	}
 	if err != nil {
-		return cfg, fmt.Errorf("config file has invalid values, did you edit the config file?\n%w", err)
+		return userConfig{}, fmt.Errorf("config file has invalid values, did you edit the config file?\n%w", err)
 	}
 
 	oidc := iniCfg.Section(oidcSection)
@@ -217,10 +220,18 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 		cfg.issuerURL = oidc.Key(issuerKey).String()
 		cfg.clientID = oidc.Key(clientIDKey).String()
 		cfg.clientSecret = oidc.Key(clientSecret).String()
+
 		if oidc.HasKey(forceProviderAuthenticationKey) {
 			cfg.forceProviderAuthentication, err = oidc.Key(forceProviderAuthenticationKey).Bool()
 			if err != nil {
-				return cfg, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
+				return userConfig{}, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
+			}
+		}
+
+		if oidc.HasKey(registerDevice) {
+			cfg.registerDevice, err = oidc.Key(registerDevice).Bool()
+			if err != nil {
+				return userConfig{}, fmt.Errorf("error parsing '%s': %w", registerDevice, err)
 			}
 		}
 	}
