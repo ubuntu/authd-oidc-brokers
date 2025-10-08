@@ -41,6 +41,6 @@ func (Provider) IsTokenForDeviceRegistration(_ *oauth2.Token) (bool, error) {
 }
 
 // MaybeRegisterDevice is a no-op for the Google provider, because Google does not support device registration.
-func (Provider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string) error {
-	return nil
+func (Provider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string, _ []byte) ([]byte, func(), error) {
+	return nil, nil, nil
 }
