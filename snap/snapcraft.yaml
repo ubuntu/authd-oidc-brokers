@@ -61,7 +61,8 @@ parts:
       ln -s libhimmelblau.so.0 ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so
       install -D target/${TARGET_TRIPLE}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
     prime:
-      - -include/himmelblau.h
+      - -include/**
+      - -lib/**.so
   broker:
     source: .
     source-type: local
