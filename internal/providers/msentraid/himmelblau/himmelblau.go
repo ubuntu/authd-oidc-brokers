@@ -126,12 +126,16 @@ func RegisterDevice(
 	// If cert_key changes because another device registration was done concurrently,
 	// libhimmelblau returns "TPM error: Failed to load IdentityKey: Aes256GcmDecrypt".
 	// The mutex also prevents concurrent modifications to TPM state.
-	cleanup = func() { deviceRegistrationMu.Unlock() }
+	unlock := func() {
+		deviceRegistrationMu.Unlock()
+	}
 
 	// Ensure that the mutex is unlocked if an error occurs.
+	// We can't rename `unlock` to `cleanup` because `return nil, nil, err` sets
+	// the return value `cleanup` to `nil`, so calling `cleanup()` would panic.
 	defer func() {
 		if err != nil {
-			cleanup()
+			unlock()
 		}
 	}()
 
@@ -175,7 +179,7 @@ func RegisterDevice(
 
 	data.AuthValue = authValue
 
-	return data, cleanup, nil
+	return data, unlock, nil
 }
 
 func hostname() string {
