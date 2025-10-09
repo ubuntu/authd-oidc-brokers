@@ -220,15 +220,14 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	}
 
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iss":                                  options.issuer,
-		"sub":                                  "saved-user-id",
-		"aud":                                  "test-client-id",
-		"exp":                                  9999999999,
-		"name":                                 "test-user",
-		"preferred_username":                   "test-user-preferred-username@email.com",
-		"email":                                options.username,
-		"email_verified":                       true,
-		testutils.IsForDeviceRegistrationClaim: options.isForDeviceRegistration,
+		"iss":                options.issuer,
+		"sub":                "saved-user-id",
+		"aud":                "test-client-id",
+		"exp":                9999999999,
+		"name":               "test-user",
+		"preferred_username": "test-user-preferred-username@email.com",
+		"email":              options.username,
+		"email_verified":     true,
 	})
 	encodedIDToken, err := idToken.SignedString(testutils.MockKey)
 	require.NoError(t, err, "Setup: signing ID token should not have failed")
@@ -249,6 +248,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	}
 	if options.refreshTokenExpired {
 		tok.Token.RefreshToken = testutils.ExpiredRefreshToken
+	}
+	tok.ExtraFields = map[string]any{
+		testutils.IsForDeviceRegistrationClaim: options.isForDeviceRegistration,
 	}
 
 	if !options.noUserInfo {
