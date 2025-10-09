@@ -313,12 +313,14 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 		if !b.provider.SupportsDeviceRegistration() {
 			// If the provider does not support device registration,
 			// we can always use the token for local password authentication.
+			log.Debugf(context.Background(), "Provider does not support device registration, so local password authentication is available for user %q", session.username)
 			return true
 		}
 
 		if session.isOffline {
 			// If the session is in offline mode, we can't register the device anyway,
 			// so we can allow the user to use local password authentication.
+			log.Debugf(context.Background(), "Session is in offline mode, so local password authentication is available for user %q", session.username)
 			return true
 		}
 
