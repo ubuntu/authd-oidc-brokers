@@ -452,7 +452,7 @@ func (p *Provider) MaybeRegisterDevice(
 	username string,
 	issuerURL string,
 	jsonData []byte,
-) ([]byte, func(), error) {
+) (registrationData []byte, cleanup func(), err error) {
 	// If this function is called, it means that the token that we have is for device registration,
 	// so we can't use it to access the Microsoft Graph API.
 	p.needsAccessTokenForGraphAPI = true
@@ -465,7 +465,8 @@ func (p *Provider) MaybeRegisterDevice(
 			return nil, nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
 		}
 		if data.IsValid() {
-			return jsonData, nil, nil
+			cleanup = func() {}
+			return jsonData, cleanup, nil
 		}
 	}
 
