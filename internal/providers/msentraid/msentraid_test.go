@@ -2,6 +2,7 @@ package msentraid_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -149,7 +150,8 @@ func TestGetUserInfo(t *testing.T) {
 			var deviceRegistrationData []byte
 			if tc.acquireAccessToken {
 				var cleanup func()
-				deviceRegistrationData, cleanup = maybeRegisterDevice(t)
+				deviceRegistrationData, cleanup, err = maybeRegisterDevice(t, nil)
+				require.NoError(t, err, "maybeRegisterDevice should not return an error")
 				t.Cleanup(cleanup)
 			}
 
@@ -219,21 +221,91 @@ func TestIsTokenForDeviceRegistration(t *testing.T) {
 	}
 }
 
+//nolint:tparallel // We do call t.Parallel() in subtests when possible.
 func TestMaybeRegisterDevice(t *testing.T) {
 	t.Parallel()
 
-	_, cleanup := maybeRegisterDevice(t)
-	t.Cleanup(cleanup)
+	registrationData, err := json.Marshal(&himmelblau.DeviceRegistrationData{
+		DeviceID:      "test-device-id",
+		CertKey:       []byte("test-cert-key"),
+		TransportKey:  []byte("test-transport-key"),
+		AuthValue:     "test-auth-value",
+		TPMMachineKey: []byte("test-tpm-machine-key"),
+	})
+	require.NoError(t, err, "Failed to marshal device registration data")
+
+	type args = maybeRegisterDeviceArgs
+
+	tests := map[string]struct {
+		args
+
+		wantErr bool
+	}{
+		"Successfully_registers_device":       {},
+		"Reuses_existing_device_registration": {args: args{oldData: registrationData}},
+
+		"Error_when_username_does_not_have_a_domain": {args: args{username: "userwithoutdomain"}, wantErr: true},
+		"Error_when_discover_url_is_invalid_format":  {args: args{discoveryURL: "invalid-url"}, wantErr: true},
+		"Error_when_discover_url_is_unreachable":     {args: args{discoveryURL: "http://invalid-url"}, wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Don't run in parallel if we need to set a custom discovery URL,
+			// as that modifies a global variable.
+			if tc.discoveryURL == "" {
+				t.Parallel()
+			}
+
+			registrationData, cleanup, err := maybeRegisterDevice(t, &tc.args)
+			if tc.wantErr {
+				require.Error(t, err, "MaybeRegisterDevice should return an error")
+				return
+			}
+			require.NoError(t, err, "MaybeRegisterDevice should not return an error")
+			t.Cleanup(cleanup)
+
+			if tc.oldData != nil {
+				require.Equal(t, tc.oldData, registrationData, "MaybeRegisterDevice should return the existing registration data")
+			}
+
+			// We don't compare the registration data with a golden file, because it differs every time due to the
+			// generated keys. Instead, we just check that it's not empty.
+			require.NotEmpty(t, registrationData, "MaybeRegisterDevice should return non-empty registration data")
+		})
+	}
 }
 
-func maybeRegisterDevice(t *testing.T) (registrationData []byte, cleanup func()) {
+type maybeRegisterDeviceArgs struct {
+	username     string
+	oldData      []byte
+	discoveryURL string
+}
+
+func maybeRegisterDevice(
+	t *testing.T,
+	args *maybeRegisterDeviceArgs,
+) ([]byte, func(), error) {
 	// Start the mock MS server (or reuse the existing one)
 	ensureMockMSServerForDeviceRegistration(t)
 	mockServer := mockMSServerForDeviceRegistration
 
-	// Make libhimmelblau use the mock MS server.
+	if args == nil {
+		args = &maybeRegisterDeviceArgs{}
+	}
+
+	if args.discoveryURL == "" {
+		args.discoveryURL = mockServer.URL
+	}
+
+	if args.username == "" {
+		args.username = "user@example.com"
+	}
+
+	// Make libhimmelblau use the mock MS server. These settings are global,
+	// so test case which need different settings must not run in parallel.
 	himmelblau.SetAuthorityBaseURL(t, mockServer.URL)
-	err := os.Setenv("HIMMELBLAU_DISCOVERY_URL", mockServer.URL)
+	err := os.Setenv("HIMMELBLAU_DISCOVERY_URL", args.discoveryURL)
 	require.NoError(t, err, "Failed to set HIMMELBLAU_DISCOVERY_URL environment variable")
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{})
@@ -250,16 +322,13 @@ func maybeRegisterDevice(t *testing.T) (registrationData []byte, cleanup func())
 
 	p := msentraid.New()
 
-	registrationData, cleanup, err = p.MaybeRegisterDevice(
+	return p.MaybeRegisterDevice(
 		context.Background(),
 		token,
-		"user@example.com",
+		args.username,
 		issuerURL,
-		nil,
+		args.oldData,
 	)
-	require.NoError(t, err, "MaybeRegisterDevice should not return an error")
-
-	return registrationData, cleanup
 }
 
 func TestMain(m *testing.M) {
