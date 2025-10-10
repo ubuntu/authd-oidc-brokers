@@ -173,31 +173,31 @@ func TestGetAuthenticationModes(t *testing.T) {
 		registerDevice                     bool
 		providerSupportsDeviceRegistration bool
 
-		wantErr       bool
-		wantFirstMode string
+		wantErr   bool
+		wantModes []string
 	}{
 		// === Authentication session ===
 		"Get_device_auth_qr_if_there_is_no_token": {
-			token:         nil,
-			wantFirstMode: authmodes.DeviceQr,
+			token:     nil,
+			wantModes: []string{authmodes.DeviceQr},
 		},
 		"Get_device_auth_qr_if_there_is_no_password_file": {
 			noPasswordFile: true,
-			wantFirstMode:  authmodes.DeviceQr,
+			wantModes:      []string{authmodes.DeviceQr},
 		},
 		"Get_password_and_device_auth_qr_if_token_exists": {
-			token:         &tokenOptions{},
-			wantFirstMode: authmodes.Password,
+			token:     &tokenOptions{},
+			wantModes: []string{authmodes.Password},
 		},
 
 		// --- Next auth mode ---
 		"Get_newpassword_if_next_auth_mode_is_newpassword": {
-			nextAuthMode:  authmodes.NewPassword,
-			wantFirstMode: authmodes.NewPassword,
+			nextAuthMode: authmodes.NewPassword,
+			wantModes:    []string{authmodes.NewPassword},
 		},
 		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {
-			nextAuthMode:  authmodes.DeviceQr,
-			wantFirstMode: authmodes.DeviceQr,
+			nextAuthMode: authmodes.DeviceQr,
+			wantModes:    []string{authmodes.DeviceQr},
 		},
 
 		// --- Device registration ---
@@ -205,59 +205,62 @@ func TestGetAuthenticationModes(t *testing.T) {
 			registerDevice:                     true,
 			providerSupportsDeviceRegistration: true,
 			token:                              &tokenOptions{isForDeviceRegistration: false},
-			wantFirstMode:                      authmodes.DeviceQr,
+			wantModes:                          []string{authmodes.DeviceQr},
 		},
 		"Get_only_device_auth_qr_if_device_should_not_be_registered_and_token_is_for_device_registration": {
 			registerDevice:                     false,
 			providerSupportsDeviceRegistration: true,
 			token:                              &tokenOptions{isForDeviceRegistration: true},
-			wantFirstMode:                      authmodes.DeviceQr,
+			wantModes:                          []string{authmodes.DeviceQr},
 		},
 		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
 			registerDevice:                     true,
 			providerSupportsDeviceRegistration: true,
 			token:                              &tokenOptions{isForDeviceRegistration: true},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
 		},
 		"Get_password_and_device_auth_qr_if_device_should_not_be_registered_and_token_is_not_for_device_registration": {
 			registerDevice:                     false,
 			providerSupportsDeviceRegistration: true,
 			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
 		},
 		"Get_password_and_device_auth_qr_if_token_is_not_for_device_registration_but_provider_does_not_support_it": {
 			registerDevice:                     false,
 			providerSupportsDeviceRegistration: false,
 			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
 		},
 
 		"Get_only_password_if_token_exists_and_provider_is_not_available": {
 			token:               &tokenOptions{},
 			providerAddress:     "127.0.0.1:31310",
 			unavailableProvider: true,
-			wantFirstMode:       authmodes.Password,
+			wantModes:           []string{authmodes.Password},
 		},
 		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {
 			token:                 &tokenOptions{},
 			providerAddress:       "127.0.0.1:31311",
 			deviceAuthUnsupported: true,
-			wantFirstMode:         authmodes.Password,
+			wantModes:             []string{authmodes.Password},
 		},
 
 		// === Change password session ===
 		"Get_only_password_if_token_exists_and_session_is_for_changing_password": {
-			sessionMode:   sessionmode.ChangePassword,
-			token:         &tokenOptions{},
-			wantFirstMode: authmodes.Password,
+			sessionMode: sessionmode.ChangePassword,
+			token:       &tokenOptions{},
+			wantModes:   []string{authmodes.Password},
 		},
 		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {
-			sessionMode:   sessionmode.ChangePassword,
-			token:         &tokenOptions{},
-			nextAuthMode:  authmodes.NewPassword,
-			wantFirstMode: authmodes.NewPassword,
+			sessionMode:  sessionmode.ChangePassword,
+			token:        &tokenOptions{},
+			nextAuthMode: authmodes.NewPassword,
+			wantModes:    []string{authmodes.NewPassword},
 		},
 		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value": {
-			sessionMode:   sessionmode.ChangePasswordOld,
-			token:         &tokenOptions{},
-			wantFirstMode: authmodes.Password,
+			sessionMode: sessionmode.ChangePasswordOld,
+			token:       &tokenOptions{},
+			wantModes:   []string{authmodes.Password},
 		},
 
 		// === Errors ===
