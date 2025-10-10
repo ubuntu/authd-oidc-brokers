@@ -187,7 +187,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		},
 		"Get_password_and_device_auth_qr_if_token_exists": {
 			token:     &tokenOptions{},
-			wantModes: []string{authmodes.Password},
+			wantModes: []string{authmodes.Password, authmodes.DeviceQr},
 		},
 
 		// --- Next auth mode ---
@@ -353,18 +353,22 @@ func TestGetAuthenticationModes(t *testing.T) {
 				layouts = append(layouts, supportedUILayouts[layout])
 			}
 
-			got, err := b.GetAuthenticationModes(sessionID, layouts)
+			modes, err := b.GetAuthenticationModes(sessionID, layouts)
 			if tc.wantErr {
 				require.Error(t, err, "GetAuthenticationModes should have returned an error")
 				return
 			}
 			require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
 
-			if tc.wantFirstMode != "" {
-				require.Equal(t, tc.wantFirstMode, got[0]["id"], "First mode should be the expected one")
+			var modeIDs []string
+			for _, mode := range modes {
+				id, exists := mode["id"]
+				require.True(t, exists, "Each mode should have an 'id' field")
+				modeIDs = append(modeIDs, id)
 			}
+			require.Equal(t, tc.wantModes, modeIDs, "GetAuthenticationModes should have returned the expected modes")
 
-			golden.CheckOrUpdateYAML(t, got)
+			golden.CheckOrUpdateYAML(t, modes)
 		})
 	}
 }
