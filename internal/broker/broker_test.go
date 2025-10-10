@@ -181,6 +181,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 			token:     nil,
 			wantModes: []string{authmodes.DeviceQr},
 		},
+		"Get_password_and_device_auth_qr_if_token_exists": {
+			token:     &tokenOptions{},
+			wantModes: []string{authmodes.Password, authmodes.DeviceQr},
+		},
 		"Get_only_device_auth_qr_if_token_is_invalid": {
 			token:     &tokenOptions{invalid: true},
 			wantModes: []string{authmodes.DeviceQr},
@@ -188,10 +192,6 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Get_only_device_auth_qr_if_there_is_no_password_file": {
 			noPasswordFile: true,
 			wantModes:      []string{authmodes.DeviceQr},
-		},
-		"Get_password_and_device_auth_qr_if_token_exists": {
-			token:     &tokenOptions{},
-			wantModes: []string{authmodes.Password, authmodes.DeviceQr},
 		},
 
 		// --- Next auth mode ---
@@ -205,6 +205,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 		},
 
 		// --- Device registration ---
+		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
 		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
 			registerDevice:                     true,
 			providerSupportsDeviceRegistration: true,
@@ -216,12 +222,6 @@ func TestGetAuthenticationModes(t *testing.T) {
 			providerSupportsDeviceRegistration: true,
 			token:                              &tokenOptions{isForDeviceRegistration: true},
 			wantModes:                          []string{authmodes.DeviceQr},
-		},
-		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
-			registerDevice:                     true,
-			providerSupportsDeviceRegistration: true,
-			token:                              &tokenOptions{isForDeviceRegistration: true},
-			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
 		},
 		"Get_password_and_device_auth_qr_if_device_should_not_be_registered_and_token_is_not_for_device_registration": {
 			registerDevice:                     false,
