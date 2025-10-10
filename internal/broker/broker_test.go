@@ -176,7 +176,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantErr       bool
 		wantFirstMode string
 	}{
-		// Authentication session
+		// === Authentication session ===
 		"Get_device_auth_qr_if_there_is_no_token": {
 			wantFirstMode: authmodes.DeviceQr,
 		},
@@ -188,6 +188,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 			token:         &tokenOptions{},
 			wantFirstMode: authmodes.Password,
 		},
+
+		// --- Next auth mode ---
 		"Get_newpassword_if_next_auth_mode_is_newpassword": {
 			nextAuthMode:  authmodes.NewPassword,
 			wantFirstMode: authmodes.NewPassword,
@@ -197,6 +199,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantFirstMode: authmodes.DeviceQr,
 		},
 
+		// --- Device registration ---
 		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
 			token:                              &tokenOptions{isForDeviceRegistration: false},
 			registerDevice:                     true,
@@ -235,7 +238,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantFirstMode:         authmodes.Password,
 		},
 
-		// Change password session
+		// === Change password session ===
 		"Get_only_password_if_token_exists_and_session_is_for_changing_password": {
 			sessionMode:   sessionmode.ChangePassword,
 			token:         &tokenOptions{},
@@ -253,12 +256,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantFirstMode: authmodes.Password,
 		},
 
+		// === Errors ===
+		// --- General errors ---
 		"Error_if_there_is_no_session": {
 			sessionID: "-",
 			wantErr:   true,
 		},
-
-		// General errors
 		"Error_if_no_authentication_mode_is_supported": {
 			providerAddress:       "127.0.0.1:31312",
 			deviceAuthUnsupported: true,
@@ -281,7 +284,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantErr:          true,
 		},
 
-		// Change password session errors
+		// --- Change password session errors ---
 		"Error_if_session_is_for_changing_password_but_password_file_does_not_exist": {
 			sessionMode:    sessionmode.ChangePassword,
 			noPasswordFile: true,
