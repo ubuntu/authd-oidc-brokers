@@ -176,19 +176,22 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantErr       bool
 		wantFirstMode string
 	}{
-		// Authentication session
+		// === Authentication session ===
 		"Get_device_auth_qr_if_there_is_no_token": {
+			token:         nil,
 			wantFirstMode: authmodes.DeviceQr,
 		},
 		"Get_device_auth_qr_if_there_is_no_password_file": {
 			token:          &tokenOptions{},
-			wantFirstMode:  authmodes.DeviceQr,
 			noPasswordFile: true,
+			wantFirstMode:  authmodes.DeviceQr,
 		},
 		"Get_password_and_device_auth_qr_if_token_exists": {
 			token:         &tokenOptions{},
 			wantFirstMode: authmodes.Password,
 		},
+
+		// --- Next auth mode ---
 		"Get_newpassword_if_next_auth_mode_is_newpassword": {
 			nextAuthMode:  authmodes.NewPassword,
 			wantFirstMode: authmodes.NewPassword,
@@ -198,29 +201,33 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantFirstMode: authmodes.DeviceQr,
 		},
 
+		// --- Device registration ---
 		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: false},
 			registerDevice:                     true,
 			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
 			wantFirstMode:                      authmodes.DeviceQr,
 		},
 		"Get_only_device_auth_qr_if_device_should_not_be_registered_and_token_is_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: true},
+			registerDevice:                     false,
 			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
 			wantFirstMode:                      authmodes.DeviceQr,
 		},
 		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: true},
-			providerSupportsDeviceRegistration: true,
 			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
 		},
 		"Get_password_and_device_auth_qr_if_device_should_not_be_registered_and_token_is_not_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: false},
+			registerDevice:                     false,
 			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
 		},
 		"Get_password_and_device_auth_qr_if_token_is_not_for_device_registration_but_provider_does_not_support_it": {
-			token:                              &tokenOptions{isForDeviceRegistration: false},
+			registerDevice:                     false,
 			providerSupportsDeviceRegistration: false,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
 		},
 
 		"Get_only_password_if_token_exists_and_provider_is_not_available": {
@@ -236,7 +243,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantFirstMode:         authmodes.Password,
 		},
 
-		// Change password session
+		// === Change password session ===
 		"Get_only_password_if_token_exists_and_session_is_for_changing_password": {
 			sessionMode:   sessionmode.ChangePassword,
 			token:         &tokenOptions{},
@@ -254,12 +261,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantFirstMode: authmodes.Password,
 		},
 
+		// === Errors ===
+		// --- General errors ---
 		"Error_if_there_is_no_session": {
 			sessionID: "-",
 			wantErr:   true,
 		},
-
-		// General errors
 		"Error_if_no_authentication_mode_is_supported": {
 			providerAddress:       "127.0.0.1:31312",
 			deviceAuthUnsupported: true,
@@ -282,7 +289,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			wantErr:          true,
 		},
 
-		// Change password session errors
+		// --- Change password session errors ---
 		"Error_if_session_is_for_changing_password_but_password_file_does_not_exist": {
 			sessionMode:    sessionmode.ChangePassword,
 			noPasswordFile: true,
