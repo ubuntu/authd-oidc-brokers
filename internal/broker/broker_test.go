@@ -177,7 +177,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantModes []string
 	}{
 		// === Authentication session ===
-		"Get_device_auth_qr_if_there_is_no_token": {
+		"Get_only_device_auth_qr_if_there_is_no_token": {
 			token:     nil,
 			wantModes: []string{authmodes.DeviceQr},
 		},
@@ -185,7 +185,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			token:     &tokenOptions{invalid: true},
 			wantModes: []string{authmodes.DeviceQr},
 		},
-		"Get_device_auth_qr_if_there_is_no_password_file": {
+		"Get_only_device_auth_qr_if_there_is_no_password_file": {
 			token:          &tokenOptions{},
 			noPasswordFile: true,
 			wantModes:      []string{authmodes.DeviceQr},
@@ -196,11 +196,11 @@ func TestGetAuthenticationModes(t *testing.T) {
 		},
 
 		// --- Next auth mode ---
-		"Get_newpassword_if_next_auth_mode_is_newpassword": {
+		"Get_only_newpassword_if_next_auth_mode_is_newpassword": {
 			nextAuthMode: authmodes.NewPassword,
 			wantModes:    []string{authmodes.NewPassword},
 		},
-		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {
+		"Get_only_device_auth_qr_if_next_auth_mode_is_device_qr": {
 			nextAuthMode: authmodes.DeviceQr,
 			wantModes:    []string{authmodes.DeviceQr},
 		},
@@ -256,7 +256,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			token:       &tokenOptions{},
 			wantModes:   []string{authmodes.Password},
 		},
-		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {
+		"Get_only_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {
 			sessionMode:  sessionmode.ChangePassword,
 			token:        &tokenOptions{},
 			nextAuthMode: authmodes.NewPassword,
