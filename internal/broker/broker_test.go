@@ -164,40 +164,170 @@ func TestGetAuthenticationModes(t *testing.T) {
 		sessionID        string
 		supportedLayouts []string
 
-		providerAddress       string
-		tokenExists           bool
-		nextAuthMode          string
-		unavailableProvider   bool
-		deviceAuthUnsupported bool
+		providerAddress                    string
+		token                              *tokenOptions
+		noPasswordFile                     bool
+		nextAuthMode                       string
+		unavailableProvider                bool
+		deviceAuthUnsupported              bool
+		registerDevice                     bool
+		providerSupportsDeviceRegistration bool
 
-		wantErr       bool
-		wantFirstMode string
+		wantErr   bool
+		wantModes []string
 	}{
-		// Authentication session
-		"Get_device_auth_qr_if_there_is_no_token":           {wantFirstMode: authmodes.DeviceQr},
-		"Get_password_and_device_auth_qr_if_token_exists":   {tokenExists: true, wantFirstMode: authmodes.Password},
-		"Get_newpassword_if_next_auth_mode_is_newpassword":  {nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
-		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {nextAuthMode: authmodes.DeviceQr, wantFirstMode: authmodes.DeviceQr},
+		// === Authentication session ===
+		"Get_only_device_auth_qr_if_there_is_no_token": {
+			token:     nil,
+			wantModes: []string{authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_token_exists": {
+			token:     &tokenOptions{},
+			wantModes: []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_token_is_invalid": {
+			token:     &tokenOptions{invalid: true},
+			wantModes: []string{authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_there_is_no_password_file": {
+			noPasswordFile: true,
+			wantModes:      []string{authmodes.DeviceQr},
+		},
 
-		"Get_only_password_if_token_exists_and_provider_is_not_available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true, wantFirstMode: authmodes.Password},
-		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true, wantFirstMode: authmodes.Password},
+		// --- Next auth mode ---
+		"Get_only_newpassword_if_next_auth_mode_is_newpassword": {
+			nextAuthMode: authmodes.NewPassword,
+			wantModes:    []string{authmodes.NewPassword},
+		},
+		"Get_only_device_auth_qr_if_next_auth_mode_is_device_qr": {
+			nextAuthMode: authmodes.DeviceQr,
+			wantModes:    []string{authmodes.DeviceQr},
+		},
 
-		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                {sessionMode: sessionmode.ChangePassword, tokenExists: true, wantFirstMode: authmodes.Password},
-		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {sessionMode: sessionmode.ChangePassword, tokenExists: true, nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
-		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":            {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true, wantFirstMode: authmodes.Password},
+		// --- Device registration ---
+		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration_and_provider_does_not_support_it": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: false,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_device_should_not_be_registered_and_token_is_for_device_registration": {
+			registerDevice:                     false,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			wantModes:                          []string{authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_device_should_not_be_registered_and_token_is_not_for_device_registration": {
+			registerDevice:                     false,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_token_is_not_for_device_registration_but_provider_does_not_support_it": {
+			registerDevice:                     false,
+			providerSupportsDeviceRegistration: false,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		// Note: We don't care about the weird case that the token is for device registration but the provider doesn't
+		//       support it, because that never happens (providers which don't support device registration always return
+		//       false for IsTokenForDeviceRegistration).
 
-		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
+		"Get_only_password_if_device_should_be_registered_and_token_is_not_for_device_registration_but_provider_is_not_available": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			unavailableProvider:                true,
+			// TODO: Automatically set providerAddress if unavailableProvider or deviceAuthUnsupported is set
+			providerAddress: "127.0.0.1:31308",
+			wantModes:       []string{authmodes.Password},
+		},
+		"Get_only_password_if_device_should_not_be_registered_and_token_is_for_device_registration_but_provider_is_not_available": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			unavailableProvider:                true,
+			providerAddress:                    "127.0.0.1:31309",
+			wantModes:                          []string{authmodes.Password},
+		},
 
-		// General errors
-		"Error_if_no_authentication_mode_is_supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
-		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
-		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
-		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
-		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
+		"Get_only_password_if_token_exists_and_provider_is_not_available": {
+			token:               &tokenOptions{},
+			providerAddress:     "127.0.0.1:31310",
+			unavailableProvider: true,
+			wantModes:           []string{authmodes.Password},
+		},
+		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {
+			token:                 &tokenOptions{},
+			providerAddress:       "127.0.0.1:31311",
+			deviceAuthUnsupported: true,
+			wantModes:             []string{authmodes.Password},
+		},
 
-		// Change password session errors
-		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePassword, wantErr: true},
+		// === Change password session ===
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password": {
+			sessionMode: sessionmode.ChangePassword,
+			token:       &tokenOptions{},
+			wantModes:   []string{authmodes.Password},
+		},
+		"Get_only_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {
+			sessionMode:  sessionmode.ChangePassword,
+			token:        &tokenOptions{},
+			nextAuthMode: authmodes.NewPassword,
+			wantModes:    []string{authmodes.NewPassword},
+		},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value": {
+			sessionMode: sessionmode.ChangePasswordOld,
+			token:       &tokenOptions{},
+			wantModes:   []string{authmodes.Password},
+		},
+
+		// === Errors ===
+		// --- General errors ---
+		"Error_if_there_is_no_session": {
+			sessionID: "-",
+			wantErr:   true,
+		},
+		"Error_if_no_authentication_mode_is_supported": {
+			providerAddress:       "127.0.0.1:31312",
+			deviceAuthUnsupported: true,
+			wantErr:               true,
+		},
+		"Error_if_expecting_device_auth_qr_but_not_supported": {
+			supportedLayouts: []string{"qrcode-without-wait"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_device_auth_but_not_supported": {
+			supportedLayouts: []string{"qrcode-without-wait-and-qrcode"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_newpassword_but_not_supported": {
+			supportedLayouts: []string{"newpassword-without-entry"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_password_but_not_supported": {
+			supportedLayouts: []string{"form-without-entry"},
+			wantErr:          true,
+		},
+
+		// --- Change password session errors ---
+		"Error_if_session_is_for_changing_password_but_password_file_does_not_exist": {
+			sessionMode:    sessionmode.ChangePassword,
+			noPasswordFile: true,
+			wantErr:        true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -207,7 +337,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 				tc.sessionMode = sessionmode.Login
 			}
 
-			cfg := &brokerForTestConfig{}
+			cfg := &brokerForTestConfig{
+				registerDevice:             tc.registerDevice,
+				supportsDeviceRegistration: tc.providerSupportsDeviceRegistration,
+			}
 			if tc.providerAddress == "" {
 				// Use the default provider URL if no address is provided.
 				cfg.issuerURL = defaultIssuerURL
@@ -232,13 +365,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 			if tc.sessionID == "-" {
 				sessionID = ""
 			}
-			if tc.tokenExists {
-				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
-				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
-				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
-				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+			if tc.token != nil {
+				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
+			}
+			if !tc.noPasswordFile && sessionID != "" {
+				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
@@ -252,18 +384,22 @@ func TestGetAuthenticationModes(t *testing.T) {
 				layouts = append(layouts, supportedUILayouts[layout])
 			}
 
-			got, err := b.GetAuthenticationModes(sessionID, layouts)
+			modes, err := b.GetAuthenticationModes(sessionID, layouts)
 			if tc.wantErr {
 				require.Error(t, err, "GetAuthenticationModes should have returned an error")
 				return
 			}
 			require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
 
-			if tc.wantFirstMode != "" {
-				require.Equal(t, tc.wantFirstMode, got[0]["id"], "First mode should be the expected one")
+			var modeIDs []string
+			for _, mode := range modes {
+				id, exists := mode["id"]
+				require.True(t, exists, "Each mode should have an 'id' field")
+				modeIDs = append(modeIDs, id)
 			}
+			require.Equal(t, tc.wantModes, modeIDs, "GetAuthenticationModes should have returned the expected modes")
 
-			golden.CheckOrUpdateYAML(t, got)
+			golden.CheckOrUpdateYAML(t, modes)
 		})
 	}
 }
@@ -349,12 +485,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
 			if tc.tokenExists {
-				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
-				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
-				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
-				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
