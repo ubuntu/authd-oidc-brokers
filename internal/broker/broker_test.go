@@ -178,11 +178,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 	}{
 		// === Authentication session ===
 		"Get_device_auth_qr_if_there_is_no_token": {
+			token:         nil,
 			wantFirstMode: authmodes.DeviceQr,
 		},
 		"Get_device_auth_qr_if_there_is_no_password_file": {
-			wantFirstMode:  authmodes.DeviceQr,
 			noPasswordFile: true,
+			wantFirstMode:  authmodes.DeviceQr,
 		},
 		"Get_password_and_device_auth_qr_if_token_exists": {
 			token:         &tokenOptions{},
@@ -201,28 +202,31 @@ func TestGetAuthenticationModes(t *testing.T) {
 
 		// --- Device registration ---
 		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: false},
 			registerDevice:                     true,
 			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
 			wantFirstMode:                      authmodes.DeviceQr,
 		},
 		"Get_only_device_auth_qr_if_device_should_not_be_registered_and_token_is_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: true},
+			registerDevice:                     false,
 			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
 			wantFirstMode:                      authmodes.DeviceQr,
 		},
 		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: true},
-			providerSupportsDeviceRegistration: true,
 			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
 		},
 		"Get_password_and_device_auth_qr_if_device_should_not_be_registered_and_token_is_not_for_device_registration": {
-			token:                              &tokenOptions{isForDeviceRegistration: false},
+			registerDevice:                     false,
 			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
 		},
 		"Get_password_and_device_auth_qr_if_token_is_not_for_device_registration_but_provider_does_not_support_it": {
-			token:                              &tokenOptions{isForDeviceRegistration: false},
+			registerDevice:                     false,
 			providerSupportsDeviceRegistration: false,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
 		},
 
 		"Get_only_password_if_token_exists_and_provider_is_not_available": {
