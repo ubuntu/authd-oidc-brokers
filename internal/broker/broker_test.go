@@ -217,6 +217,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 			token:                              &tokenOptions{isForDeviceRegistration: false},
 			wantModes:                          []string{authmodes.DeviceQr},
 		},
+		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration_and_provider_does_not_support_it": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: false,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
 		"Get_only_device_auth_qr_if_device_should_not_be_registered_and_token_is_for_device_registration": {
 			registerDevice:                     false,
 			providerSupportsDeviceRegistration: true,
@@ -234,6 +240,27 @@ func TestGetAuthenticationModes(t *testing.T) {
 			providerSupportsDeviceRegistration: false,
 			token:                              &tokenOptions{isForDeviceRegistration: false},
 			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		// Note: We don't care about the weird case that the token is for device registration but the provider doesn't
+		//       support it, because that never happens (providers which don't support device registration always return
+		//       false for IsTokenForDeviceRegistration).
+
+		"Get_only_password_if_device_should_be_registered_and_token_is_not_for_device_registration_but_provider_is_not_available": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			unavailableProvider:                true,
+			// TODO: Automatically set providerAddress if unavailableProvider or deviceAuthUnsupported is set
+			providerAddress: "127.0.0.1:31308",
+			wantModes:       []string{authmodes.Password},
+		},
+		"Get_only_password_if_device_should_not_be_registered_and_token_is_for_device_registration_but_provider_is_not_available": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			unavailableProvider:                true,
+			providerAddress:                    "127.0.0.1:31309",
+			wantModes:                          []string{authmodes.Password},
 		},
 
 		"Get_only_password_if_token_exists_and_provider_is_not_available": {
