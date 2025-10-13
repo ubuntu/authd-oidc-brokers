@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -36,6 +37,8 @@ const (
 	maxAuthAttempts    = 3
 	maxRequestDuration = 5 * time.Second
 )
+
+var tokenExpiredErrorRegex = regexp.MustCompile(`^oidc: current time .* before the nbf \(not before\) time: .*`)
 
 // Config is the configuration for the broker.
 type Config struct {
@@ -869,6 +872,9 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 	}
 
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
+	if err != nil && tokenExpiredErrorRegex.MatchString(err.Error()) {
+		return info.User{}, internalErrors.NewForDisplayError("acquired token is expired. This usually means your system clock is incorrect.")
+	}
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
