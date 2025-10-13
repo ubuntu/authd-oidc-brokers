@@ -21,10 +21,10 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	internalErrors "github.com/ubuntu/authd-oidc-brokers/internal/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/fileutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
-	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
@@ -906,7 +906,7 @@ func decorateErrorMessage(data *isAuthenticatedDataResponse, msg string) {
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
 // the provided fallback message.
 func errorMessageForDisplay(err error, fallback string) errorMessage {
-	var e *providerErrors.ForDisplayError
+	var e *internalErrors.ForDisplayError
 	if errors.As(err, &e) {
 		return errorMessage{Message: e.Error()}
 	}

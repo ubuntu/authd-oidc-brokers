@@ -18,7 +18,7 @@ import (
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
+	internalErrors "github.com/ubuntu/authd-oidc-brokers/internal/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
@@ -170,7 +170,7 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 		return nil, err
 	}
 	if !slices.Contains(scopes, "GroupMember.Read.All") {
-		return nil, providerErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
+		return nil, internalErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
 	}
 
 	cred := azureTokenCredential{token: token}
@@ -350,7 +350,7 @@ func (p Provider) SupportedOIDCAuthModes() []string {
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
 func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
-		return providerErrors.NewForDisplayError("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
+		return internalErrors.NewForDisplayError("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
 	}
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
@@ -359,10 +359,10 @@ func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string
 	if !usernameRegexp.MatchString(authenticatedUsername) {
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
-		return providerErrors.NewForDisplayError("the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
+		return internalErrors.NewForDisplayError("the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {
-		return providerErrors.NewForDisplayError("requested username %q contains invalid characters", requestedUsername)
+		return internalErrors.NewForDisplayError("requested username %q contains invalid characters", requestedUsername)
 	}
 
 	return nil
