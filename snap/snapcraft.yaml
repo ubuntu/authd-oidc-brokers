@@ -48,6 +48,22 @@ slots:
     name: com.ubuntu.authd.MSEntraID
 
 parts:
+  libhimmelblau:
+    source: ./third_party/libhimmelblau
+    plugin: rust
+    build-packages:
+      - libssl-dev
+    override-build: |
+      cargo install cargo-c
+      cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of
+      echo "Installing libhimmelblau.so and himmelblau.h"
+      TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
+      install -D target/${TARGET_TRIPLE}/release/libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so.0
+      ln -s libhimmelblau.so.0 ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so
+      install -D target/${TARGET_TRIPLE}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
+    prime:
+      - -include/**
+      - -lib/**.so
   broker:
     source: .
     source-type: local
@@ -55,14 +71,20 @@ parts:
     go-buildtags: [withmsentraid]
     build-snaps:
       - go
+    after:
+      - libhimmelblau
+      - version
+    build-environment:
+      # Add libhimmelblau to the CFLAGS and LDFLAGS so that it can be found by the Go linker.
+      - CGO_CFLAGS: -I${CRAFT_STAGE}/include
+      - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau
     override-build: |
-      go mod download all
-      go mod vendor
       VERSION=$(craftctl get version)
       export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+
+      go mod download all
+      go mod vendor
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
-    after:
-      - version
   config:
     source: conf/
     source-type: local
