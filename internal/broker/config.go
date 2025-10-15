@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ubuntu/authd/log"
 	"gopkg.in/ini.v1"
 )
 
@@ -210,6 +212,38 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 	}
 	if err != nil {
 		return cfg, fmt.Errorf("config file has invalid values, did you edit the config file?\n%w", err)
+	}
+
+	// Print warnings for unknown sections and keys.
+	known := map[string][]string{
+		oidcSection: {
+			issuerKey,
+			clientIDKey,
+			clientSecret,
+			forceProviderAuthenticationKey,
+		},
+		usersSection: {
+			allowedUsersKey,
+			ownerKey,
+			homeDirKey,
+			sshSuffixesKey,
+			sshSuffixesKeyOld,
+			extraGroupsKey,
+			ownerExtraGroupsKey,
+		},
+	}
+	for _, section := range iniCfg.Sections() {
+		if _, ok := known[section.Name()]; !ok {
+			log.Warningf(context.Background(), "unknown section %q in config file, ignoring", section.Name())
+			continue
+		}
+
+		for _, key := range section.Keys() {
+			if _, ok := known[section.Name()]; !ok {
+				log.Warningf(context.Background(), "unknown key %q in section %q in config file, ignoring", key.Name(), section.Name())
+				continue
+			}
+		}
 	}
 
 	oidc := iniCfg.Section(oidcSection)
