@@ -597,223 +597,217 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return AuthRetry, unexpectedErrMsg("could not decode secret")
 	}
 
-	var authInfo *token.AuthCachedInfo
 	switch session.selectedMode {
 	case authmodes.Device, authmodes.DeviceQr:
-		response := session.deviceAuthResponse
-		if response == nil {
-			log.Error(context.Background(), "device auth response is not set")
-			return AuthDenied, unexpectedErrMsg("device auth response is not set")
-		}
-
-		if response.Expiry.IsZero() {
-			response.Expiry = time.Now().Add(time.Hour)
-			log.Debugf(context.Background(), "Device code does not have an expiry time, using default of %s", response.Expiry)
-		} else {
-			log.Debugf(context.Background(), "Device code expiry time: %s", response.Expiry)
-		}
-		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
-		defer cancel()
-
-		// The default interval is 5 seconds, which means the user has to wait up to 5 seconds after
-		// successful authentication. We're reducing the interval to 1 second to improve UX a bit.
-		response.Interval = 1
-
-		log.Debug(ctx, "Polling to exchange device code for token...")
-		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
-		if err != nil {
-			log.Errorf(context.Background(), "Error retrieving access token: %s", err)
-			return AuthRetry, errorMessage{Message: "Error retrieving access token. Please try again."}
-		}
-		log.Debug(ctx, "Exchanged device code for token.")
-
-		rawIDToken, ok := t.Extra("id_token").(string)
-		if !ok {
-			log.Error(context.Background(), "token response does not contain an ID token")
-			return AuthDenied, unexpectedErrMsg("token response does not contain an ID token")
-		}
-
-		authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
-
-		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
-		if err != nil {
-			log.Errorf(context.Background(), "could not get provider metadata: %s", err)
-			return AuthDenied, unexpectedErrMsg("could not get provider metadata")
-		}
-
-		if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
-			// Load existing device registration data if there is any, to avoid re-registering the device.
-			var deviceRegistrationData []byte
-			oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath)
-			if err == nil {
-				deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
-			}
-
-			var cleanup func()
-			authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx, t,
-				session.username,
-				b.cfg.issuerURL,
-				deviceRegistrationData,
-			)
-			if err != nil {
-				log.Errorf(context.Background(), "error registering device: %s", err)
-				return AuthDenied, errorMessage{Message: "Error registering device"}
-			}
-			defer cleanup()
-
-			// Store the auth info, so that the device registration data is not lost if the login fails after this point.
-			if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-				log.Errorf(context.Background(), "Failed to store token: %s", err)
-				return AuthDenied, unexpectedErrMsg("failed to store token")
-			}
-		}
-
-		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, authInfo)
-		if err != nil {
-			log.Errorf(context.Background(), "could not fetch user info: %s", err)
-			return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
-		}
-
-		if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-			log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-			return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
-		}
-
-		// Store the auth info in the session so that we can use it when handling the
-		// next IsAuthenticated call for the new password mode.
-		session.authInfo = authInfo
-		session.nextAuthModes = []string{authmodes.NewPassword}
-
-		return AuthNext, nil
-
+		return b.deviceAuth(ctx, session)
 	case authmodes.Password:
-		ok, err := password.CheckPassword(secret, session.passwordPath)
-		if err != nil {
-			log.Error(context.Background(), err.Error())
-			return AuthDenied, unexpectedErrMsg("could not check password")
-		}
-		if !ok {
-			log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
-			return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
-		}
-
-		authInfo, err = token.LoadAuthInfo(session.tokenPath)
-		if err != nil {
-			log.Error(context.Background(), err.Error())
-			return AuthDenied, unexpectedErrMsg("could not load stored token")
-		}
-
-		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
-		// want the method call to return an error if refreshing the token or user info fails).
-		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
-			// Store the auth info in the session so that we can use it when handling the
-			// next IsAuthenticated call for the new password mode.
-			session.authInfo = authInfo
-			session.nextAuthModes = []string{authmodes.NewPassword}
-			return AuthNext, nil
-		}
-
-		if b.cfg.forceProviderAuthentication && session.isOffline {
-			log.Error(context.Background(), "Remote authentication failed: force_provider_authentication is enabled, but the identity provider is not reachable")
-			return AuthDenied, errorMessage{Message: "Remote authentication failed: identity provider is not reachable"}
-		}
-
-		// Refresh the token if we're online even if the token has not expired
-		if b.cfg.forceProviderAuthentication || !session.isOffline {
-			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
-			var retrieveErr *oauth2.RetrieveError
-			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
-				log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
-				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-				return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again using device authentication."}
-			}
-			if err != nil {
-				log.Errorf(context.Background(), "Failed to refresh token: %s", err)
-				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
-			}
-		}
-
-		// If device registration is enabled, ensure that the device is registered.
-		if b.provider.SupportsDeviceRegistration() && !session.isOffline && b.cfg.registerDevice {
-			var cleanup func()
-			authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx,
-				authInfo.Token,
-				session.username,
-				b.cfg.issuerURL,
-				authInfo.DeviceRegistrationData,
-			)
-			if err != nil {
-				log.Errorf(context.Background(), "error registering device: %s", err)
-				return AuthDenied, errorMessage{Message: "Error registering device"}
-			}
-			defer cleanup()
-
-			// Store the auth info, so that the device registration data is not lost if the login fails after this point.
-			if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-				log.Errorf(context.Background(), "Failed to store token: %s", err)
-				return AuthDenied, unexpectedErrMsg("failed to store token")
-			}
-		}
-
-		// Try to refresh the user info
-		userInfo, err := b.fetchUserInfo(ctx, session, authInfo)
-		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
-			// The device is disabled, deny login
-			log.Errorf(context.Background(), "Login failed: %s", err)
-			return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
-		}
-		var tokenAcquisitionError himmelblau.TokenAcquisitionError
-		if errors.As(err, &tokenAcquisitionError) {
-			log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
-			// The token acquisition failed unexpectedly.
-			// One possible reason is that the device was deleted by an administrator in Entra ID.
-			// In this case, the user can perform device authentication again to get a new token
-			// and register the device again, allowing the user to log in.
-			// We delete the device registration data to cause device authentication to re-register the device.
-			authInfo.DeviceRegistrationData = nil
-			if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-				log.Errorf(context.Background(), "Failed to store token: %s", err)
-				return AuthDenied, unexpectedErrMsg("failed to store token")
-			}
-
-			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-			msg := "Authentication failed due to a token issue. Please try again using device authentication."
-			return AuthNext, errorMessage{Message: msg}
-		}
-		if err != nil && authInfo.UserInfo.Name == "" {
-			// We don't have a valid user info, so we can't proceed.
-			log.Errorf(context.Background(), "could not fetch user info: %s", err)
-			return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
-		}
-		if err != nil {
-			// We couldn't fetch the user info, but we have a valid cached one.
-			log.Warningf(context.Background(), "Could not fetch user info: %v. Using cached user info.", err)
-		} else {
-			authInfo.UserInfo = userInfo
-		}
-
+		return b.passwordAuth(ctx, session, secret)
 	case authmodes.NewPassword:
-		if secret == "" {
-			return AuthRetry, unexpectedErrMsg("empty secret")
-		}
-
-		// This mode must always come after an authentication mode, so we should have auth info from the previous mode
-		// stored in the session.
-		authInfo = session.authInfo
-		if authInfo == nil {
-			log.Error(context.Background(), "auth info is not set")
-			return AuthDenied, unexpectedErrMsg("auth info is not set")
-		}
-
-		if err = password.HashAndStorePassword(secret, session.passwordPath); err != nil {
-			log.Errorf(context.Background(), "Failed to store password: %s", err)
-			return AuthDenied, unexpectedErrMsg("failed to store password")
-		}
+		return b.newPassword(session, secret)
 	default:
 		log.Errorf(context.Background(), "unknown authentication mode %q", session.selectedMode)
 		return AuthDenied, unexpectedErrMsg("unknown authentication mode")
 	}
+}
 
+func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
+	response := session.deviceAuthResponse
+	if response == nil {
+		log.Error(context.Background(), "device auth response is not set")
+		return AuthDenied, unexpectedErrMsg("device auth response is not set")
+	}
+
+	if response.Expiry.IsZero() {
+		response.Expiry = time.Now().Add(time.Hour)
+		log.Debugf(context.Background(), "Device code does not have an expiry time, using default of %s", response.Expiry)
+	} else {
+		log.Debugf(context.Background(), "Device code expiry time: %s", response.Expiry)
+	}
+	expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
+	defer cancel()
+
+	// The default interval is 5 seconds, which means the user has to wait up to 5 seconds after
+	// successful authentication. We're reducing the interval to 1 second to improve UX a bit.
+	response.Interval = 1
+
+	log.Debug(ctx, "Polling to exchange device code for token...")
+	t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
+	if err != nil {
+		log.Errorf(context.Background(), "Error retrieving access token: %s", err)
+		return AuthRetry, errorMessage{Message: "Error retrieving access token. Please try again."}
+	}
+	log.Debug(ctx, "Exchanged device code for token.")
+
+	rawIDToken, ok := t.Extra("id_token").(string)
+	if !ok {
+		log.Error(context.Background(), "token response does not contain an ID token")
+		return AuthDenied, unexpectedErrMsg("token response does not contain an ID token")
+	}
+
+	authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
+
+	authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
+	if err != nil {
+		log.Errorf(context.Background(), "could not get provider metadata: %s", err)
+		return AuthDenied, unexpectedErrMsg("could not get provider metadata")
+	}
+
+	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+		// Load existing device registration data if there is any, to avoid re-registering the device.
+		var deviceRegistrationData []byte
+		oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath)
+		if err == nil {
+			deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+		}
+
+		var cleanup func()
+		authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx, t,
+			session.username,
+			b.cfg.issuerURL,
+			deviceRegistrationData,
+		)
+		if err != nil {
+			log.Errorf(context.Background(), "error registering device: %s", err)
+			return AuthDenied, errorMessage{Message: "Error registering device"}
+		}
+		defer cleanup()
+
+		// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+		if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+	}
+
+	authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, authInfo)
+	if err != nil {
+		log.Errorf(context.Background(), "could not fetch user info: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
+	}
+
+	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
+		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
+	}
+
+	// Store the auth info in the session so that we can use it when handling the
+	// next IsAuthenticated call for the new password mode.
+	session.authInfo = authInfo
+	session.nextAuthModes = []string{authmodes.NewPassword}
+
+	return AuthNext, nil
+}
+
+func (b *Broker) passwordAuth(ctx context.Context, session *session, secret string) (string, isAuthenticatedDataResponse) {
+	ok, err := password.CheckPassword(secret, session.passwordPath)
+	if err != nil {
+		log.Error(context.Background(), err.Error())
+		return AuthDenied, unexpectedErrMsg("could not check password")
+	}
+	if !ok {
+		log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
+		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
+	}
+
+	authInfo, err := token.LoadAuthInfo(session.tokenPath)
+	if err != nil {
+		log.Error(context.Background(), err.Error())
+		return AuthDenied, unexpectedErrMsg("could not load stored token")
+	}
+
+	// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
+	// want the method call to return an error if refreshing the token or user info fails).
+	if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
+		// Store the auth info in the session so that we can use it when handling the
+		// next IsAuthenticated call for the new password mode.
+		session.authInfo = authInfo
+		session.nextAuthModes = []string{authmodes.NewPassword}
+		return AuthNext, nil
+	}
+
+	if b.cfg.forceProviderAuthentication && session.isOffline {
+		log.Error(context.Background(), "Remote authentication failed: force_provider_authentication is enabled, but the identity provider is not reachable")
+		return AuthDenied, errorMessage{Message: "Remote authentication failed: identity provider is not reachable"}
+	}
+
+	// Refresh the token if we're online even if the token has not expired
+	if b.cfg.forceProviderAuthentication || !session.isOffline {
+		authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
+		var retrieveErr *oauth2.RetrieveError
+		if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
+			log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
+			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+			return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again using device authentication."}
+		}
+		if err != nil {
+			log.Errorf(context.Background(), "Failed to refresh token: %s", err)
+			return AuthDenied, errorMessage{Message: "Failed to refresh token"}
+		}
+	}
+
+	// If device registration is enabled, ensure that the device is registered.
+	if b.provider.SupportsDeviceRegistration() && !session.isOffline && b.cfg.registerDevice {
+		var cleanup func()
+		authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx,
+			authInfo.Token,
+			session.username,
+			b.cfg.issuerURL,
+			authInfo.DeviceRegistrationData,
+		)
+		if err != nil {
+			log.Errorf(context.Background(), "error registering device: %s", err)
+			return AuthDenied, errorMessage{Message: "Error registering device"}
+		}
+		defer cleanup()
+
+		// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+		if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+	}
+
+	// Try to refresh the user info
+	userInfo, err := b.fetchUserInfo(ctx, session, authInfo)
+	if errors.Is(err, himmelblau.ErrDeviceDisabled) {
+		// The device is disabled, deny login
+		log.Errorf(context.Background(), "Login failed: %s", err)
+		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
+	}
+	var tokenAcquisitionError himmelblau.TokenAcquisitionError
+	if errors.As(err, &tokenAcquisitionError) {
+		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
+		// The token acquisition failed unexpectedly.
+		// One possible reason is that the device was deleted by an administrator in Entra ID.
+		// In this case, the user can perform device authentication again to get a new token
+		// and register the device again, allowing the user to log in.
+		// We delete the device registration data to cause device authentication to re-register the device.
+		authInfo.DeviceRegistrationData = nil
+		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+
+		session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+		msg := "Authentication failed due to a token issue. Please try again using device authentication."
+		return AuthNext, errorMessage{Message: msg}
+	}
+	if err != nil && authInfo.UserInfo.Name == "" {
+		// We don't have a valid user info, so we can't proceed.
+		log.Errorf(context.Background(), "could not fetch user info: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
+	}
+	if err != nil {
+		// We couldn't fetch the user info, but we have a valid cached one.
+		log.Warningf(context.Background(), "Could not fetch user info: %v. Using cached user info.", err)
+	} else {
+		authInfo.UserInfo = userInfo
+	}
+
+	return b.finishAuth(session, authInfo)
+}
+
+func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
 	if b.cfg.shouldRegisterOwner() {
 		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
 			// The user is not allowed if we fail to create the owner-autoregistration file.
@@ -852,6 +846,27 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+}
+
+func (b *Broker) newPassword(session *session, secret string) (string, isAuthenticatedDataResponse) {
+	if secret == "" {
+		return AuthRetry, unexpectedErrMsg("empty secret")
+	}
+
+	// This mode must always come after an authentication mode, so we should have auth info from the previous mode
+	// stored in the session.
+	authInfo := session.authInfo
+	if authInfo == nil {
+		log.Error(context.Background(), "auth info is not set")
+		return AuthDenied, unexpectedErrMsg("auth info is not set")
+	}
+
+	if err := password.HashAndStorePassword(secret, session.passwordPath); err != nil {
+		log.Errorf(context.Background(), "Failed to store password: %s", err)
+		return AuthDenied, unexpectedErrMsg("failed to store password")
+	}
+
+	return b.finishAuth(session, authInfo)
 }
 
 // userNameIsAllowed checks whether the user's username is allowed to access the machine.
