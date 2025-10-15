@@ -2,7 +2,6 @@ package broker_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,7 +19,6 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
-	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"gopkg.in/yaml.v3"
 )
@@ -549,7 +547,7 @@ func TestIsAuthenticated(t *testing.T) {
 		firstMode                string
 		firstSecret              string
 		badFirstKey              bool
-		getUserInfoFails         bool
+		getGroupsFails           bool
 		useOldNameForSecretField bool
 		groupsReturnedByProvider []info.Group
 
@@ -600,11 +598,11 @@ func TestIsAuthenticated(t *testing.T) {
 			groupsReturnedByProvider: []info.Group{{Name: "refreshed-group"}},
 			wantGroups:               []info.Group{{Name: "refreshed-group"}},
 		},
-		"Authenticating_with_password_keeps_old_groups_if_fetching_user_info_fails": {
-			firstMode:        authmodes.Password,
-			token:            &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
-			getUserInfoFails: true,
-			wantGroups:       []info.Group{{Name: "old-group"}},
+		"Authenticating_with_password_keeps_old_groups_if_fetching_groups_fails": {
+			firstMode:      authmodes.Password,
+			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
+			getGroupsFails: true,
+			wantGroups:     []info.Group{{Name: "old-group"}},
 		},
 		"Authenticating_with_password_keeps_old_groups_if_session_is_offline": {
 			firstMode:      authmodes.Password,
@@ -617,12 +615,12 @@ func TestIsAuthenticated(t *testing.T) {
 			token:                    &tokenOptions{},
 			useOldNameForSecretField: true,
 		},
-		"Authenticating_to_change_password_still_allowed_if_fetching_user_info_fails": {
+		"Authenticating_to_change_password_still_allowed_if_fetching_groups_fails": {
 			sessionMode:       sessionmode.ChangePassword,
 			firstMode:         authmodes.Password,
 			wantNextAuthModes: []string{authmodes.NewPassword},
 			token:             &tokenOptions{noUserInfo: true},
-			getUserInfoFails:  true,
+			getGroupsFails:    true,
 		},
 		"Authenticating_with_password_when_refresh_token_is_expired_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
@@ -709,11 +707,6 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error_when_existing_token_has_no_user_info_and_fetching_user_info_fails": {
-			firstMode:        authmodes.Password,
-			token:            &tokenOptions{noUserInfo: true},
-			getUserInfoFails: true,
-		},
 
 		"Error_when_mode_is_qrcode_and_link_expires": {
 			customHandlers: map[string]testutils.EndpointHandler{
@@ -781,7 +774,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 			cfg := &brokerForTestConfig{
 				Config:                      broker.Config{DataDir: dataDir},
-				getUserInfoFails:            tc.getUserInfoFails,
+				getGroupsFails:              tc.getGroupsFails,
 				ownerAllowed:                true,
 				firstUserBecomesOwner:       !tc.userDoesNotBecomeOwner,
 				allUsersAllowed:             tc.allUsersAllowed,
@@ -1232,81 +1225,6 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				}
 				t.Fatalf("user %s is not in the allowed or unallowed users list", u)
 			}
-		})
-	}
-}
-
-func TestFetchUserInfo(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		username string
-		token    tokenOptions
-
-		emptyHomeDir bool
-		emptyGroups  bool
-		wantGroupErr bool
-		wantErr      bool
-	}{
-		"Successfully_fetch_user_info_with_groups":                         {},
-		"Successfully_fetch_user_info_without_groups":                      {emptyGroups: true},
-		"Successfully_fetch_user_info_with_default_home_when_not_provided": {emptyHomeDir: true},
-
-		"Error_when_token_can_not_be_validated":                   {token: tokenOptions{invalid: true}, wantErr: true},
-		"Error_when_ID_token_claims_are_invalid":                  {token: tokenOptions{invalidClaims: true}, wantErr: true},
-		"Error_when_username_is_not_configured":                   {token: tokenOptions{username: "-"}, wantErr: true},
-		"Error_when_username_is_different_than_the_requested_one": {token: tokenOptions{username: "other-user@email.com"}, wantErr: true},
-		"Error_when_getting_user_groups":                          {wantGroupErr: true, wantErr: true},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			homeDirPath := "/home/userInfoTests/"
-			if tc.emptyHomeDir {
-				homeDirPath = ""
-			}
-
-			dataDir := t.TempDir()
-
-			cfg := &brokerForTestConfig{
-				Config:      broker.Config{DataDir: dataDir},
-				issuerURL:   defaultIssuerURL,
-				homeBaseDir: homeDirPath,
-			}
-			if tc.emptyGroups {
-				cfg.getGroupsFunc = func() ([]info.Group, error) {
-					return []info.Group{}, nil
-				}
-			}
-			if tc.wantGroupErr {
-				cfg.getGroupsFunc = func() ([]info.Group, error) {
-					return nil, errors.New("error getting groups")
-				}
-			}
-			b := newBrokerForTests(t, cfg)
-
-			if tc.username == "" {
-				tc.username = "test-user@email.com"
-			}
-			tc.token.issuer = defaultIssuerURL
-
-			sessionID, _, err := b.NewSession(tc.username, "lang", sessionmode.Login)
-			require.NoError(t, err, "Setup: Failed to create session for the tests")
-
-			cachedInfo := generateCachedInfo(t, tc.token)
-			if cachedInfo == nil {
-				cachedInfo = &token.AuthCachedInfo{}
-			}
-
-			got, err := b.FetchUserInfo(sessionID, cachedInfo)
-			if tc.wantErr {
-				require.Error(t, err, "FetchUserInfo should have returned an error")
-				return
-			}
-			require.NoError(t, err, "FetchUserInfo should not have returned an error")
-
-			golden.CheckOrUpdateYAML(t, got)
 		})
 	}
 }

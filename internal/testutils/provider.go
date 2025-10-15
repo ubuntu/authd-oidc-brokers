@@ -355,7 +355,7 @@ type MockProvider struct {
 	GetGroupsFunc                      func() ([]info.Group, error)
 	FirstCallDelay                     int
 	SecondCallDelay                    int
-	GetUserInfoFails                   bool
+	GetGroupsFails                     bool
 	ProviderSupportsDeviceRegistration bool
 
 	numCalls     int
@@ -388,26 +388,11 @@ func (p *MockProvider) GetMetadata(provider *oidc.Provider) (map[string]interfac
 	return nil, nil
 }
 
-// GetUserInfo is a no-op when no specific provider is in use.
-func (p *MockProvider) GetUserInfo(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}, certKey []byte) (info.User, error) {
-	if p.GetUserInfoFails {
-		return info.User{}, errors.New("error requested in the mock")
-	}
-
+// GetUserInfo returns the user info parsed from the ID token.
+func (p *MockProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
-	}
-
-	userGroups := []info.Group{
-		{Name: "remote-test-group", UGID: "12345"},
-		{Name: "local-test-group", UGID: ""},
-	}
-	if p.GetGroupsFunc != nil {
-		userGroups, err = p.GetGroupsFunc()
-		if err != nil {
-			return info.User{}, err
-		}
 	}
 
 	p.numCallsLock.Lock()
@@ -428,8 +413,30 @@ func (p *MockProvider) GetUserInfo(ctx context.Context, clientID string, issuerU
 		userClaims.Sub,
 		userClaims.Shell,
 		userClaims.Gecos,
-		userGroups,
+		nil,
 	), nil
+}
+
+// GetGroups returns the groups the user is a member of.
+func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte) ([]info.Group, error) {
+	if p.GetGroupsFails {
+		return nil, errors.New("error requested in the mock")
+	}
+
+	userGroups := []info.Group{
+		{Name: "remote-test-group", UGID: "12345"},
+		{Name: "local-test-group", UGID: ""},
+	}
+
+	var err error
+	if p.GetGroupsFunc != nil {
+		userGroups, err = p.GetGroupsFunc()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return userGroups, nil
 }
 
 // IsTokenForDeviceRegistration checks if the token is for device registration.
