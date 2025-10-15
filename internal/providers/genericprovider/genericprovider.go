@@ -122,5 +122,5 @@ func (p GenericProvider) IsTokenForDeviceRegistration(_ *oauth2.Token) (bool, er
 
 // MaybeRegisterDevice is a no-op when no specific provider is in use.
 func (p GenericProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string, _ []byte) ([]byte, func(), error) {
-	return nil, nil, nil
+	return nil, func() {}, nil
 }
