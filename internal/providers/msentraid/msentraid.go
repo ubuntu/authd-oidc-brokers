@@ -138,6 +138,9 @@ func (p *Provider) GetUserInfo(
 		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
 			return info.User{}, err
 		}
+		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+			return info.User{}, providerErrors.NewForDisplayError("Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator.")
+		}
 		if err != nil {
 			return info.User{}, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
 		}

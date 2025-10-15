@@ -14,7 +14,8 @@ import "C"
 import (
 	"context"
 	"fmt"
-	"slices"
+	"strconv"
+	"strings"
 	"unsafe"
 
 	"github.com/ubuntu/authd/log"
@@ -22,6 +23,9 @@ import (
 
 // ErrDeviceDisabled is returned when the device is disabled in Microsoft Entra ID.
 var ErrDeviceDisabled = fmt.Errorf("device is disabled in Microsoft Entra ID")
+
+// ErrInvalidRedirectURI is returned when the redirect URI of the client application is missing or invalid.
+var ErrInvalidRedirectURI = fmt.Errorf("invalid redirect URI")
 
 // TokenAcquisitionError is returned when an error occurs while acquiring a token via libhimmelblau.
 type TokenAcquisitionError struct {
@@ -32,7 +36,19 @@ func (e TokenAcquisitionError) Error() string {
 	return e.msg
 }
 
-const deviceDisabledErrorCode = 135011
+// Entra AADSTS error codes as defined in
+// https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes
+const (
+	// AADSTS135011 Device used during the authentication is disabled.
+	deviceDisabledErrorCode = 135011
+	// AADSTS50011 InvalidReplyTo - The reply address is missing, misconfigured,
+	// or doesn't match reply addresses configured for the app. As a resolution
+	// ensures to add this missing reply address to the Microsoft Entra
+	// application or have someone with the permissions to manage your
+	// application in Microsoft Entra IF do this for you. To learn more, see the
+	// troubleshooting article for error AADSTS50011.
+	invalidRedirectURIErrorCode = 50011
+)
 
 type boxedDynTPM C.BoxedDynTpm
 type brokerClientApplication C.BrokerClientApplication
@@ -301,13 +317,26 @@ func acquireTokenByRefreshToken(broker *brokerClientApplication, refreshToken st
 		&userToken,
 	)
 	if msalErr != nil {
-		var errorCodes []C.uint32_t
+		// Error codes can be returned by libhimmelblau as a single code in the aadsts_code field or
+		// as a list of error codes in the acquire_token_error_codes field.
+		errorCodes := []C.uint32_t{msalErr.aadsts_code}
 		if msalErr.acquire_token_error_codes != nil && msalErr.acquire_token_error_codes_len > 0 {
 			errorCodes = unsafe.Slice(msalErr.acquire_token_error_codes, msalErr.acquire_token_error_codes_len)
 		}
-		if slices.Contains(errorCodes, deviceDisabledErrorCode) {
-			log.Error(context.Background(), C.GoString(msalErr.msg))
-			return nil, nil, ErrDeviceDisabled
+
+		for _, errorCode := range errorCodes {
+			errorCodeStr := strconv.Itoa(int(errorCode))
+			switch {
+			// AADSTS error codes can have additional digits or subcodes appended
+			// (e.g. AADSTS500113 as a variation of AADSTS50011).
+			// Checking the prefix ensures we catch all variations of the base error code.
+			case strings.HasPrefix(errorCodeStr, strconv.Itoa(deviceDisabledErrorCode)):
+				log.Error(context.Background(), C.GoString(msalErr.msg))
+				return nil, nil, ErrDeviceDisabled
+			case strings.HasPrefix(errorCodeStr, strconv.Itoa(invalidRedirectURIErrorCode)):
+				log.Errorf(context.Background(), "Token acquisition failed: %v", C.GoString(msalErr.msg))
+				return nil, nil, ErrInvalidRedirectURI
+			}
 		}
 
 		// The token acquisition failed unexpectedly.
