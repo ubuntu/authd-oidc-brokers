@@ -652,6 +652,12 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, unexpectedErrMsg("could not get provider metadata")
 	}
 
+	authInfo.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	if err != nil {
+		log.Errorf(context.Background(), "could not get user info: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Could not get user info")
+	}
+
 	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
 		// Load existing device registration data if there is any, to avoid re-registering the device.
 		var deviceRegistrationData []byte
@@ -679,10 +685,12 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		}
 	}
 
-	authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, authInfo)
+	// We can only fetch the groups after registering the device, because the token acquired for device registration
+	// cannot be used with the Microsoft Graph API and a new token must be acquired for the Graph API.
+	authInfo.UserInfo.Groups, err = b.getGroups(ctx, session, authInfo)
 	if err != nil {
-		log.Errorf(context.Background(), "could not fetch user info: %s", err)
-		return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
+		log.Errorf(context.Background(), "failed to get groups: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
@@ -732,7 +740,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Refresh the token if we're online even if the token has not expired
 	if b.cfg.forceProviderAuthentication || !session.isOffline {
-		authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
+		authInfo, err = b.refreshToken(ctx, session, authInfo)
 		var retrieveErr *oauth2.RetrieveError
 		if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
 			log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
@@ -767,8 +775,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		}
 	}
 
-	// Try to refresh the user info
-	userInfo, err := b.fetchUserInfo(ctx, session, authInfo)
+	// Try to refresh the groups
+	groups, err := b.getGroups(ctx, session, authInfo)
 	if errors.Is(err, himmelblau.ErrDeviceDisabled) {
 		// The device is disabled, deny login
 		log.Errorf(context.Background(), "Login failed: %s", err)
@@ -792,16 +800,11 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		msg := "Authentication failed due to a token issue. Please try again using device authentication."
 		return AuthNext, errorMessage{Message: msg}
 	}
-	if err != nil && authInfo.UserInfo.Name == "" {
-		// We don't have a valid user info, so we can't proceed.
-		log.Errorf(context.Background(), "could not fetch user info: %s", err)
-		return AuthDenied, errorMessageForDisplay(err, "Could not fetch user info")
-	}
 	if err != nil {
-		// We couldn't fetch the user info, but we have a valid cached one.
-		log.Warningf(context.Background(), "Could not fetch user info: %v. Using cached user info.", err)
+		// We couldn't fetch the groups, but we have valid cached ones.
+		log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
 	} else {
-		authInfo.UserInfo = userInfo
+		authInfo.UserInfo.Groups = groups
 	}
 
 	return b.finishAuth(session, authInfo)
@@ -998,13 +1001,13 @@ func (b *Broker) updateSession(sessionID string, session session) error {
 }
 
 // refreshToken refreshes the OAuth2 token and returns the updated AuthCachedInfo.
-func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
+func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 	// set cached token expiry time to one hour in the past
 	// this makes sure the token is refreshed even if it has not 'actually' expired
 	oldToken.Token.Expiry = time.Now().Add(-time.Hour)
-	oauthToken, err := oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
+	oauthToken, err := session.oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
 	if err != nil {
 		return nil, err
 	}
@@ -1018,29 +1021,28 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.provider)
 	t.ProviderMetadata = oldToken.ProviderMetadata
-	t.UserInfo = oldToken.UserInfo
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
+
+	t.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	if err != nil {
+		return nil, err
+	}
+
+	t.UserInfo.Groups = oldToken.UserInfo.Groups
+
 	return t, nil
 }
 
-func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.AuthCachedInfo) (userInfo info.User, err error) {
-	if session.isOffline {
-		return info.User{}, errors.New("session is in offline mode")
-	}
-
-	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
+// userInfoFromIDToken verifies and parses the raw ID token and returns the user info from it.
+// Note that verifying the ID token requires a working network connection to the provider's JWKs endpoint,
+// so make sure to only call this function if the session is online.
+func (b *Broker) userInfoFromIDToken(ctx context.Context, session *session, rawIDToken string) (info.User, error) {
+	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userInfo, err = b.provider.GetUserInfo(ctx,
-		b.cfg.clientID,
-		b.cfg.issuerURL,
-		t.Token,
-		idToken,
-		t.ProviderMetadata,
-		t.DeviceRegistrationData,
-	)
+	userInfo, err := b.provider.GetUserInfo(idToken)
 	if err != nil {
 		return info.User{}, err
 	}
@@ -1054,7 +1056,21 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
 	}
 
-	return userInfo, err
+	return userInfo, nil
+}
+
+func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthCachedInfo) ([]info.Group, error) {
+	if session.isOffline {
+		return nil, errors.New("session is in offline mode")
+	}
+
+	return b.provider.GetGroups(ctx,
+		b.cfg.clientID,
+		b.cfg.issuerURL,
+		t.Token,
+		t.ProviderMetadata,
+		t.DeviceRegistrationData,
+	)
 }
 
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns

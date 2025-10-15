@@ -42,13 +42,8 @@ func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interf
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p GenericProvider) GetUserInfo(_ context.Context, _, _ string, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}, _ []byte) (info.User, error) {
+func (p GenericProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
-	if err != nil {
-		return info.User{}, err
-	}
-
-	userGroups, err := p.getGroups(accessToken)
 	if err != nil {
 		return info.User{}, err
 	}
@@ -59,8 +54,13 @@ func (p GenericProvider) GetUserInfo(_ context.Context, _, _ string, accessToken
 		userClaims.Sub,
 		userClaims.Shell,
 		userClaims.Gecos,
-		userGroups,
+		nil,
 	), nil
+}
+
+// GetGroups is a no-op when no specific provider is in use.
+func (GenericProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte) ([]info.Group, error) {
+	return nil, nil
 }
 
 // NormalizeUsername parses a username into a normalized version.
@@ -96,11 +96,6 @@ func (p GenericProvider) userClaims(idToken info.Claimer) (claims, error) {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 	return userClaims, nil
-}
-
-// getGroups is a no-op when no specific provider is in use.
-func (p GenericProvider) getGroups(_ *oauth2.Token) ([]info.Group, error) {
-	return nil, nil
 }
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.

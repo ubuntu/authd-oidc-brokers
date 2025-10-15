@@ -38,7 +38,7 @@ type brokerForTestConfig struct {
 	allowedSSHSuffixes          []string
 	provider                    providers.Provider
 
-	getUserInfoFails           bool
+	getGroupsFails             bool
 	supportsDeviceRegistration bool
 	firstCallDelay             int
 	secondCallDelay            int
@@ -92,7 +92,7 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 
 	provider := &testutils.MockProvider{
-		GetUserInfoFails:                   cfg.getUserInfoFails,
+		GetGroupsFails:                     cfg.getGroupsFails,
 		ProviderSupportsDeviceRegistration: cfg.supportsDeviceRegistration,
 		FirstCallDelay:                     cfg.firstCallDelay,
 		SecondCallDelay:                    cfg.secondCallDelay,

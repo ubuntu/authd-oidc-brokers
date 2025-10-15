@@ -16,15 +16,16 @@ type Provider interface {
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
 
-	GetUserInfo(
+	GetUserInfo(idToken info.Claimer) (info.User, error)
+
+	GetGroups(
 		ctx context.Context,
 		clientID string,
 		issuerURL string,
 		token *oauth2.Token,
-		idToken info.Claimer,
 		providerMetadata map[string]interface{},
 		deviceRegistrationData []byte,
-	) (info.User, error)
+	) ([]info.Group, error)
 
 	IsTokenExpiredError(err oauth2.RetrieveError) bool
 	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)

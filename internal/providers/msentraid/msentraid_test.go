@@ -97,15 +97,6 @@ func TestVerifyUsername(t *testing.T) {
 func TestGetUserInfo(t *testing.T) {
 	t.Parallel()
 
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{})
-	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
-	require.NoError(t, err, "Failed to sign access token")
-	token := &oauth2.Token{
-		AccessToken:  accessTokenStr,
-		RefreshToken: "refreshtoken",
-		Expiry:       time.Now().Add(1000 * time.Hour),
-	}
-
 	tests := map[string]struct {
 		invalidIDToken     bool
 		tokenScopes        []string
@@ -116,14 +107,61 @@ func TestGetUserInfo(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_get_user_info":                               {},
-		"Successfully_get_user_info_with_local_groups":             {groupEndpointHandler: localGroupHandler},
-		"Successfully_get_user_info_with_mixed_groups":             {groupEndpointHandler: mixedGroupHandler},
-		"Successfully_get_user_info_filtering_non_security_groups": {groupEndpointHandler: nonSecurityGroupHandler},
-		"Successfully_get_user_info_with_acquired_access_token":    {acquireAccessToken: true},
+		"Successfully_get_user_info": {},
+
+		"Error_when_id_token_claims_are_invalid": {invalidIDToken: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			idToken := validIDToken
+			if tc.invalidIDToken {
+				idToken = invalidIDToken
+			}
+
+			p := msentraid.New()
+
+			got, err := p.GetUserInfo(idToken)
+			if tc.wantErr {
+				require.Error(t, err, "GetUserInfo should return an error")
+				return
+			}
+			require.NoError(t, err, "GetUserInfo should not return an error")
+
+			golden.CheckOrUpdateYAML(t, got)
+		})
+	}
+}
+
+func TestGetGroups(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+	token := &oauth2.Token{
+		AccessToken:  accessTokenStr,
+		RefreshToken: "refreshtoken",
+		Expiry:       time.Now().Add(1000 * time.Hour),
+	}
+
+	tests := map[string]struct {
+		tokenScopes        []string
+		providerMetadata   map[string]any
+		acquireAccessToken bool
+
+		groupEndpointHandler http.HandlerFunc
+
+		wantErr bool
+	}{
+		"Successfully_get_groups":                               {},
+		"Successfully_get_groups_with_local_groups":             {groupEndpointHandler: localGroupHandler},
+		"Successfully_get_groups_with_mixed_groups":             {groupEndpointHandler: mixedGroupHandler},
+		"Successfully_get_groups_filtering_non_security_groups": {groupEndpointHandler: nonSecurityGroupHandler},
+		"Successfully_get_groups_with_acquired_access_token":    {acquireAccessToken: true},
 
 		"Error_when_msgraph_host_is_invalid":             {providerMetadata: map[string]any{"msgraph_host": "invalid"}, wantErr: true},
-		"Error_when_id_token_claims_are_invalid":         {invalidIDToken: true, wantErr: true},
 		"Error_when_token_does_not_have_required_scopes": {tokenScopes: []string{"not the required scopes"}, wantErr: true},
 		"Error_when_getting_user_groups_fails":           {groupEndpointHandler: errorGroupHandler, wantErr: true},
 		"Error_when_group_is_missing_id":                 {groupEndpointHandler: missingIDGroupHandler, wantErr: true},
@@ -135,11 +173,6 @@ func TestGetUserInfo(t *testing.T) {
 
 			if tc.tokenScopes == nil {
 				tc.tokenScopes = strings.Split(msentraid.AllExpectedScopes(), " ")
-			}
-
-			idToken := validIDToken
-			if tc.invalidIDToken {
-				idToken = invalidIDToken
 			}
 
 			if tc.providerMetadata == nil {
@@ -162,7 +195,14 @@ func TestGetUserInfo(t *testing.T) {
 			p.SetNeedsAccessTokenForGraphAPI(tc.acquireAccessToken)
 			p.SetTokenScopesForGraphAPI(tc.tokenScopes)
 
-			got, err := p.GetUserInfo(context.Background(), "", "", token, idToken, tc.providerMetadata, deviceRegistrationData)
+			got, err := p.GetGroups(
+				context.Background(),
+				"",
+				"",
+				token,
+				tc.providerMetadata,
+				deviceRegistrationData,
+			)
 			if tc.wantErr {
 				require.Error(t, err, "GetUserInfo should return an error")
 				return

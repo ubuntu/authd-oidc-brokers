@@ -111,68 +111,11 @@ func (p *Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{},
 	}, nil
 }
 
-// GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
-// the Microsoft Graph API.
-func (p *Provider) GetUserInfo(
-	ctx context.Context,
-	clientID string,
-	issuerURL string,
-	token *oauth2.Token,
-	idToken info.Claimer,
-	providerMetadata map[string]interface{},
-	deviceRegistrationDataJSON []byte,
-) (info.User, error) {
+// GetUserInfo returns the user info from the ID token.
+func (p *Provider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 	var err error
 
-	accessTokenStr := token.AccessToken
-	if p.needsAccessTokenForGraphAPI {
-		var data himmelblau.DeviceRegistrationData
-		err := json.Unmarshal(deviceRegistrationDataJSON, &data)
-		if err != nil {
-			log.Noticef(ctx, "Device registration JSON data: %s", deviceRegistrationDataJSON)
-			return info.User{}, fmt.Errorf("failed to unmarshal device registration data: %v", err)
-		}
-
-		tenantID := tenantID(issuerURL)
-		accessTokenStr, err = himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
-		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
-			return info.User{}, err
-		}
-		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
-			return info.User{}, providerErrors.NewForDisplayError("Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator.")
-		}
-		if err != nil {
-			return info.User{}, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
-		}
-	}
-	// Parse the access token without signature verification, because we're not the audience of the token (that's
-	// the Microsoft Graph API) and we don't use it for authentication, but only to access the Microsoft Graph API.
-	accessToken, _, err := new(jwt.Parser).ParseUnverified(accessTokenStr, jwt.MapClaims{})
-	if err != nil {
-		return info.User{}, fmt.Errorf("failed to parse access token: %w", err)
-	}
-
-	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
-	if providerMetadata["msgraph_host"] != nil {
-		var ok bool
-		msgraphHost, ok = providerMetadata["msgraph_host"].(string)
-		if !ok {
-			return info.User{}, fmt.Errorf("failed to cast msgraph_host to string: %v", providerMetadata["msgraph_host"])
-		}
-
-		// Handle the case that the provider metadata only contains the host without the protocol and API version,
-		// as was the case before 5fc98520c45294ffb85bb27a81929e2ec1b89fcb. This fixes #858.
-		if !strings.Contains(msgraphHost, "://") {
-			msgraphHost = fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion)
-		}
-	}
-
 	userClaims, err := p.userClaims(idToken)
-	if err != nil {
-		return info.User{}, err
-	}
-
-	userGroups, err := p.getGroups(accessToken, msgraphHost)
 	if err != nil {
 		return info.User{}, err
 	}
@@ -183,8 +126,63 @@ func (p *Provider) GetUserInfo(
 		userClaims.Sub,
 		userClaims.Shell,
 		userClaims.Gecos,
-		userGroups,
+		nil,
 	), nil
+}
+
+// GetGroups retrieves the groups the user is a member of via the Microsoft Graph API.
+func (p *Provider) GetGroups(
+	ctx context.Context,
+	clientID string,
+	issuerURL string,
+	token *oauth2.Token,
+	providerMetadata map[string]interface{},
+	deviceRegistrationDataJSON []byte,
+) ([]info.Group, error) {
+	accessTokenStr := token.AccessToken
+	if p.needsAccessTokenForGraphAPI {
+		var data himmelblau.DeviceRegistrationData
+		err := json.Unmarshal(deviceRegistrationDataJSON, &data)
+		if err != nil {
+			log.Noticef(ctx, "Device registration JSON data: %s", deviceRegistrationDataJSON)
+			return nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
+		}
+
+		tenantID := tenantID(issuerURL)
+		accessTokenStr, err = himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
+		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
+			return nil, err
+		}
+		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+			return nil, providerErrors.NewForDisplayError("Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator.")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
+		}
+	}
+	// Parse the access token without signature verification, because we're not the audience of the token (that's
+	// the Microsoft Graph API) and we don't use it for authentication, but only to access the Microsoft Graph API.
+	accessToken, _, err := new(jwt.Parser).ParseUnverified(accessTokenStr, jwt.MapClaims{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access token: %w", err)
+	}
+
+	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
+	if providerMetadata["msgraph_host"] != nil {
+		var ok bool
+		msgraphHost, ok = providerMetadata["msgraph_host"].(string)
+		if !ok {
+			return nil, fmt.Errorf("failed to cast msgraph_host to string: %v", providerMetadata["msgraph_host"])
+		}
+
+		// Handle the case that the provider metadata only contains the host without the protocol and API version,
+		// as was the case before 5fc98520c45294ffb85bb27a81929e2ec1b89fcb. This fixes #858.
+		if !strings.Contains(msgraphHost, "://") {
+			msgraphHost = fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion)
+		}
+	}
+
+	return p.fetchUserGroups(accessToken, msgraphHost)
 }
 
 type claims struct {
@@ -204,8 +202,8 @@ func (p *Provider) userClaims(idToken info.Claimer) (claims, error) {
 	return userClaims, nil
 }
 
-// getGroups access the Microsoft Graph API to get the groups the user is a member of.
-func (p *Provider) getGroups(token *jwt.Token, msgraphHost string) ([]info.Group, error) {
+// fetchUserGroups access the Microsoft Graph API to get the groups the user is a member of.
+func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info.Group, error) {
 	log.Debug(context.Background(), "Getting user groups from Microsoft Graph API")
 
 	var err error
