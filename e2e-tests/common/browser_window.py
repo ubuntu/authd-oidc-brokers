@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-
-import os
-import sys
-from time import sleep
-
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -149,47 +143,3 @@ def ascii_string_to_key_events(string):
 
 def timeout_handler(signum, frame):
     raise TimeoutError("Operation timed out")
-
-if __name__ == "__main__":
-    if os.getenv("RUN_OFFSCREEN") == "1" and "RUNNING_OFFSCREEN" not in os.environ:
-        os.execv(
-            "/usr/bin/env",
-            [
-                "/usr/bin/env",
-                "RUNNING_OFFSCREEN=1",
-                "GDK_BACKEND=x11",
-                "xvfb-run",
-                "-a",
-                sys.executable,
-            ]
-            + sys.argv,
-        )
-
-    if len(sys.argv) < 4:
-        print("Usage: BrowserWindow.py <username> <password> <code>")
-        sys.exit(1)
-
-    username = sys.argv[1]
-    password = sys.argv[2]
-    device_code = sys.argv[3]
-
-    Gtk.init(None)
-    browser = BrowserWindow()
-    browser.show_all()
-
-    browser.web_view.load_uri("https://microsoft.com/devicelogin")
-    browser.wait_for_stable_page()
-
-    browser.send_key_taps(ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
-    browser.wait_for_stable_page()
-
-    browser.send_key_taps(ascii_string_to_key_events(username) + [Gdk.KEY_Return])
-    browser.wait_for_stable_page()
-
-    browser.send_key_taps(ascii_string_to_key_events(password) + [Gdk.KEY_Return])
-    browser.wait_for_stable_page()
-
-    browser.send_key_taps([Gdk.KEY_Return])
-    browser.wait_for_stable_page()
-
-    sys.exit(0)
