@@ -1,25 +1,29 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -eu
 
 # Required environment variables:
 #    E2E_USER - The username to use for the tests
 #    E2E_PASSWORD - The password to use for the tests
-#    BROKER - The broker to test (e.g., msentraid)
+#    BROKER - The broker to test (e.g., authd-msentraid)
 # Optional environment variables:
-#    KEEP_VM - If set, the VM will be kept running after the tests finish (only recommended if running a single test)
-#    RUN_OFFSCREEN - If set to 1, the additional window for remote authentication will be run offscreen (useful for CI)
+#    SNAPSHOT_ON_FAIL - If set, a snapshot of the VM will be taken if a test fails.
+#    RUN_ONSCREEN - If set to 1, the additional window for remote authentication will be run onscreen (useful for debugging)
 
+# Required setup:
+#   Virsh domain named 'e2e-runner' must exist
+#   Domain snapshots created:
+#      ${broker}-stable-configured
+#      ${broker}-edge-configured
 
 # This script is used to run the YARF tests for the authd-oidc-brokers project.
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
-VM_DIR="${ROOT_DIR}/vm"
 TESTS_DIR="${ROOT_DIR}/tests"
 AUTHD_COMMON_DIR="${ROOT_DIR}/common"
 BROKER_COMMON_DIR="${ROOT_DIR}/$BROKER/common"
 
 # Create directory for the test run
-TEST_RUN_DIR="/tmp/oidc-e2e-test-run"
+TEST_RUN_DIR="/tmp/e2e-testrun-${BROKER}"
 mkdir -p "${TEST_RUN_DIR}"
 cd "${TEST_RUN_DIR}"
 
@@ -45,36 +49,27 @@ for test_file in $TESTS_TO_RUN; do
     test_name=$(basename "${test_file}")
     echo "Running test: ${test_name}"
 
-    echo "Resetting VM snapshots..."
-    ${VM_DIR}/reset-snapshots.sh
-
-    VM_IMG=authd-edge
+    SNAPSHOT_NAME=${BROKER}-edge-configured
     if [[ "${test_name}" == *"migration"* ]]; then
-        VM_IMG=authd-stable
+        SNAPSHOT_NAME=${BROKER}-stable-configured
     fi
-    echo "Using VM image: ${VM_IMG}"
 
-    echo "Spawning VM with snapshot: ${VM_IMG}"
-    ${VM_DIR}/spawn-vm.sh ${VM_IMG} &
-    sleep 5  # Wait a bit for the VM to boot up
-    VM_PID=$(pidof kvm)
-    echo "VM PID: ${VM_PID}"
+    virsh snapshot-revert e2e-runner "${SNAPSHOT_NAME}" || true
 
+    # Temporarily allow a command that could error out so we can grab the test result.
+    set +e
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
-    yarf --outdir "output/${test_name}" --platform=Vnc . || true
-
+    yarf --outdir "output/${test_name}" --platform=Vnc .
     test_result=$?
 
-    if [ -n "${KEEP_VM:-}" ]; then
-        echo "Stopping the test run and keeping VM running as requested: ${VM_PID}."
-        exit ${test_result}
-    else
-        echo "Stopping VM: ${VM_PID}"
-        kill -KILL "${VM_PID}"
+    set -e
+    if [ ${test_result} -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
+        echo "Test failed. Saving VM snapshot as requested..."
+        virsh snapshot-create-as e2e-runner "${test_name}-fail-$(date +%Y%m%d%H%M)"
+        echo "Snapshot '${test_name}-fail-$(date +%Y%m%d%H%M)' created."
     fi
 
-    sleep 5  # Wait for the VM to stop
     if [ ${test_result} -ne 0 ]; then
         test_results+=("${test_name}: FAILED")
     else
