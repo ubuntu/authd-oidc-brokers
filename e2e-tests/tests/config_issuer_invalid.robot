@@ -25,7 +25,7 @@ Change Broker Configuration to an invalid issuer
 
 
 Try to log in with remote user when broker has invalid issuer
-    Open GNOME Terminal
+    Open Terminal
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
     Check That Remote User Has No Available Authentication Modes

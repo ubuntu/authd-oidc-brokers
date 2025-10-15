@@ -22,13 +22,14 @@ Log in with local user
 
 
 Log in with remote user with device authentication through SSH
-    Open GNOME Terminal
+    Open Terminal
     Log In With Remote User Through SSH: QR Code    ${username}    ${local_password}
-    Close GNOME Terminal In Sudo Mode
+    Log Out From Terminal Session
+    Close Focused Window
 
 
 Check remote user is properly added to the system
-    Open GNOME Terminal
+    Open Terminal
     Get NSS Passwd Entry For Remote User    ${username}
     Check User Information    ${username}
     Get NSS Group Entries For Remote User    ${username}
@@ -37,6 +38,6 @@ Check remote user is properly added to the system
 
 
 Log in with remote user with local password through SSH
-    Open GNOME Terminal
+    Open Terminal
     Log In With Remote User Through SSH: Local Password    ${username}    ${local_password}
     Check That Remote User Can Run Sudo Commands    ${local_password}

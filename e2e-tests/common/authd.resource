@@ -7,24 +7,17 @@ Resource            ${AUTHD_COMMON}/utils.resource
 
 *** Variables ***
 ${AUTHD_COMMON}    ${CURDIR}/../authd-common
-${IMAGES_DIR}    ${CURDIR}/images
 ${local_password}    qwer1234
 
 
 *** Keywords ***
 Enable Edge Repository for Authd
-    Open GNOME Terminal In Sudo Mode
-    Hid.Type String    add-apt-repository ppa:ubuntu-enterprise-desktop/authd-edge -y
-    Hid.Keys Combo    Return
-    Match Text    Reading package lists... Done    60
-    Close GNOME Terminal In Sudo Mode
+    Run Command In Terminal     sudo add-apt-repository ppa:ubuntu-enterprise-desktop/authd-edge -y
 
 
 Disable Authd Socket and Service
-    Open GNOME Terminal In Sudo Mode
-    Run Command In GNOME Terminal    systemctl disable --now authd.socket
-    Run Command In GNOME Terminal    systemctl disable --now authd.service
-    Close GNOME Terminal In Sudo Mode
+    Run Command In Terminal    sudo systemctl mask --now authd.socket
+    Run Command In Terminal    sudo systemctl mask --now authd.service
 
 
 Get NSS Passwd Entry For Remote User
@@ -64,7 +57,10 @@ Change Local Password Of Remote User
 
 Try Log In With Remote User
     [Arguments]    ${username}
-    Hid.Type String    login ${username}
+    Hid.Type String    machinectl login
+    Hid.Keys Combo    Return
+    Match Text    ubuntu login:    60
+    Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
 

@@ -22,7 +22,7 @@ Log in with remote user with device authentication via GDM
 
 
 Check remote user is properly added to the system
-    Open GNOME Terminal
+    Open Terminal
     Get NSS Passwd Entry For Remote User    ${username}
     Check User Information    ${username}
     Get NSS Group Entries For Remote User    ${username}

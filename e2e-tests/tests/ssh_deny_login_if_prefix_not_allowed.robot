@@ -22,9 +22,9 @@ Log in with local user
 
 
 Try to log in with not allowed remote user with device authentication through SSH
-    Open GNOME Terminal
+    Open Terminal
     Start Log In With Remote User Through SSH: QR Code    ${username}
     Select Provider through SSH
-    Continue Log In With Remote User: Log In On Browser    ${username}
+    Continue Log In With Remote User: Log In On External Browser    ${username}
     Continue Log In With Remote User Through SSH: QR Code
     Check That Remote User Is Not Allowed To Log In

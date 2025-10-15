@@ -25,19 +25,19 @@ Change Broker Configuration to allowed_users as OWNER only
 
 
 Try to log in with remote user
-    Open GNOME Terminal
+    Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     Log Out From Terminal Session
     Close Focused Window
 
 
 Log in with remote user with local password
-    Open GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Log Out From Terminal Session
-    Close GNOME Terminal In Sudo Mode
+    Close Terminal In Sudo Mode
 
 
 Check That owner Was Updated In Broker Configuration
-    Open GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
     Check Configuration Value    owner    %{username}

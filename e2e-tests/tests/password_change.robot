@@ -23,16 +23,18 @@ Log in with local user
 
 
 Log in with remote user with device authentication
-    Open GNOME Terminal
+    Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
+    Log Out From Terminal Session
+    Close Focused Window
 
 
 Change Local Password Of Remote User
-    Open GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
     Change Local Password Of Remote User    ${username}    ${local_password}    ${new_password}
-    Close GNOME Terminal In Sudo Mode
+    Close Terminal In Sudo Mode
 
 
 Log in with remote user with local password
-    Open GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
     Log In With Remote User Through CLI: Local Password    ${username}    ${new_password}

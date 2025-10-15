@@ -24,14 +24,14 @@ Disable broker
 
 
 Ensure local sudo user can still log in
-    Open GNOME Terminal
-    Enter Sudo Mode In GNOME Terminal
-    Close GNOME Terminal In Sudo Mode
+    Open Terminal
+    Enter Sudo Mode In Terminal
+    Close Terminal In Sudo Mode
 
 
 Check that remote user can't log in
-    Open GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
     Try Log In With Remote User    ${username}
     Check That User Is Redirected To Local Broker
     Cancel Operation
-    Close GNOME Terminal In Sudo Mode
+    Close Terminal In Sudo Mode

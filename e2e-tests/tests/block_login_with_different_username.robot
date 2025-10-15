@@ -22,8 +22,8 @@ Log in with local user
 
 
 Fail to login if usernames do not match
-    Open GNOME Terminal
+    Open Terminal
     Start Log In With Remote User Through CLI: QR Code   different_user
     Select Provider
-    Continue Log In With Remote User: Log In On Browser   ${username}
+    Continue Log In With Remote User: Log In On External Browser   ${username}
     Check That User Information Can Not Be Fetched

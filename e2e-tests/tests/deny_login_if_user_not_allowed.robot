@@ -20,8 +20,8 @@ Log in with local user
 
 
 Log in with remote user with device authentication
-    Open GNOME Terminal
+    Open Terminal
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
-    Continue Log In With Remote User: Log In On Browser    ${username}
+    Continue Log In With Remote User: Log In On External Browser    ${username}
     Check That Remote User Is Not Allowed To Log In

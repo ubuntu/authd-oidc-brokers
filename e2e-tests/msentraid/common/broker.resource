@@ -17,38 +17,33 @@ ${ENTRAID_BROKER_CFG_DIR}    /var/snap/authd-msentraid/current/broker.conf.d
 
 *** Keywords ***
 Enable Edge Broker
-    Open GNOME Terminal In Sudo Mode
-    Run Command In GNOME Terminal    snap refresh authd-msentraid --edge
-    Close GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
+    Run Command In Terminal    snap refresh authd-msentraid --edge
+    Close Terminal In Sudo Mode
 
 
 Disable Broker And Purge Config
-    Open GNOME Terminal In Sudo Mode
-    Run Command In GNOME Terminal    snap stop authd-msentraid
-    Run Command In GNOME Terminal    rm ${AUTHD_BROKER_CFG}
-    Run Command In GNOME Terminal    systemctl restart authd.service
-    Close GNOME Terminal In Sudo Mode
+    Open Terminal In Sudo Mode
+    Run Command In Terminal    snap stop authd-msentraid
+    Run Command In Terminal    rm ${AUTHD_BROKER_CFG}
+    Run Command In Terminal    systemctl restart authd.service
+    Close Terminal In Sudo Mode
 
 
 Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}    ${local_password}
-    Open GNOME Terminal
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
-    Continue Log In With Remote User: Log In On Browser    ${username}
+    Continue Log In With Remote User: Log In On External Browser    ${username}
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
 
 
 Start Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}
-    Hid.Type String    sudo login ${username}
+    Hid.Type String    machinectl login
     Hid.Keys Combo    Return
-
-    # Wait for the password prompt
-    Match Text    [sudo] password for ubuntu
-
-    # Enter the sudo password
-    Hid.Type String    ubuntu
+    Match Text    ubuntu login:    60
+    Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
     # Check that the provider selection contains the Entra ID provider
@@ -71,7 +66,7 @@ Regenerate QR Code
     Match Text    https://microsoft.com/devicelogin    15
 
 
-Continue Log In With Remote User: Log In On Browser
+Continue Log In With Remote User: Log In On External Browser
     [Arguments]    ${username}
     # Wait until the verification URL and login code are displayed
     Match Text    https://microsoft.com/devicelogin
@@ -106,7 +101,10 @@ Continue Log In With Remote User Through CLI: Define Local Password
 
 Log In With Remote User Through CLI: Local Password
     [Arguments]    ${username}    ${local_password}
-    Hid.Type String    login ${username}
+    Hid.Type String    machinectl login
+    Hid.Keys Combo    Return
+    Match Text    ubuntu login:    60
+    Hid.Type String    ${username}
     Hid.Keys Combo    Return
     Builtin.Sleep    2
     Match Text    Enter your local password:    30
@@ -122,38 +120,32 @@ Log In With Remote User Through CLI: Local Password
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
 Change Broker Configuration
     [arguments]    ${config_key}    ${config_value}
-    Open GNOME Terminal In Sudo Mode
-    Hid.Type String    sed -i 's/\#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Open Terminal In Sudo Mode
+    Hid.Type String    sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
     Hid.Keys Combo    Return
-    Run Command In GNOME Terminal    snap restart authd-msentraid
-    Close GNOME Terminal In Sudo Mode
+    Run Command In Terminal    snap restart authd-msentraid
+    Close Terminal In Sudo Mode
 
 
 # Pretty much the same as the function above, but since YARF does not have support for
 # shifted characters yet, we need to do some workarounds.
 Change allowed_users In Broker Configuration
     [arguments]    ${config_value}
-    Open GNOME Terminal In Sudo Mode
-    Hid.Type String    sed -i 's/\#*allowed_users = .*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Hid.Keys Combo    Return
-    Run Command In GNOME Terminal    snap restart authd-msentraid
-    Close GNOME Terminal In Sudo Mode
+    Run Command In Terminal    sudo sed -i 's/#*allowed_users = .*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Terminal    snap restart authd-msentraid
 
 
 Comment Key In Broker Configuration
     [arguments]    ${config_key}
-    Open GNOME Terminal In Sudo Mode
-    Hid.Type String    sed -i 's/\#*${config_key} = .*/#${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Hid.Keys Combo    Return
-    Run Command In GNOME Terminal    snap restart authd-msentraid
-    Close GNOME Terminal In Sudo Mode
+    Run Command In Terminal    sudo sed -i 's/#*${config_key} = .*/#${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Terminal    snap restart authd-msentraid
 
 
 Log In With Remote User Through SSH: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through SSH: QR Code    ${username}
     Select Provider through SSH
-    Continue Log In With Remote User: Log In On Browser    ${username}
+    Continue Log In With Remote User: Log In On External Browser    ${username}
     Continue Log In With Remote User Through SSH: QR Code
     Continue Log In With Remote User Through SSH: Define Local Password    ${local_password}
 
@@ -207,7 +199,7 @@ Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through GDM: QR Code    ${username}
     Select Broker Through GDM
-    Continue Log In With Remote User: Log In On Browser    ${username}
+    Continue Log In With Remote User: Log In On External Browser    ${username}
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 
@@ -218,7 +210,7 @@ Start Log In With Remote User Through GDM: QR Code
     Move Pointer To Not Listed
     Left Button Click
 
-     # Enter the username
+    # Enter the username
     Match Text    Username
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
@@ -241,7 +233,8 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Match Text    Welcome to Ubuntu    30
+    Hid.Move Pointer To Proportional    0    1
+    Match Text    Show Apps    60
 
 
 Log In With Remote User Through GDM: Local Password
@@ -259,8 +252,8 @@ Log In With Remote User Through GDM: Local Password
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    # Wait for GNOME initial setup
-    Match Text    Welcome to Ubuntu    600
+    Hid.Move Pointer To Proportional    0    1
+    Match Text    Show Apps    60
 
 
 Check User Information
