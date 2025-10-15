@@ -74,7 +74,7 @@ Continue Log In With Remote User: Log In On External Browser
     ${text} =    Read Text
     ${user_code} =    StringUtils.FirstMatch    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
 
-    Start Process    ${ENTRAID_COMMON}/BrowserWindow.py    ${username}    %{E2E_PASSWORD}    ${user_code}    alias=RemoteAuth
+    Start Process    ${ENTRAID_COMMON}/device_login.py    ${username}    %{E2E_PASSWORD}    ${user_code}    alias=RemoteAuth
     Wait For Process    RemoteAuth
     Builtin.Sleep    5
 
