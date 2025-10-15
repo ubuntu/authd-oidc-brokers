@@ -15,6 +15,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
@@ -534,14 +535,16 @@ func TestIsAuthenticated(t *testing.T) {
 	correctPassword := "password"
 
 	tests := map[string]struct {
-		sessionMode                 string
-		sessionOffline              bool
-		username                    string
-		forceProviderAuthentication bool
-		userDoesNotBecomeOwner      bool
-		allUsersAllowed             bool
-		extraGroups                 []string
-		ownerExtraGroups            []string
+		sessionMode                        string
+		sessionOffline                     bool
+		username                           string
+		forceProviderAuthentication        bool
+		userDoesNotBecomeOwner             bool
+		allUsersAllowed                    bool
+		extraGroups                        []string
+		ownerExtraGroups                   []string
+		providerSupportsDeviceRegistration bool
+		registerDevice                     bool
 
 		firstMode                string
 		firstSecret              string
@@ -656,6 +659,34 @@ func TestIsAuthenticated(t *testing.T) {
 			ownerExtraGroups:         []string{"owner-group"},
 			wantGroups:               []info.Group{{Name: "remote-group"}},
 		},
+		"Authenticating_with_device_auth_when_provider_supports_device_registration": {
+			firstSecret:                        "-",
+			wantSecondCall:                     true,
+			providerSupportsDeviceRegistration: true,
+			registerDevice:                     true,
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.TokenHandler("http://127.0.0.1:31314", &testutils.TokenHandlerOptions{
+					IDTokenClaims: []map[string]interface{}{
+						{"aud": consts.MicrosoftBrokerAppID},
+					},
+				}),
+			},
+			address: "127.0.0.1:31314",
+		},
+		"Authenticating_with_password_when_provider_supports_device_registration": {
+			firstMode:                          authmodes.Password,
+			token:                              &tokenOptions{},
+			providerSupportsDeviceRegistration: true,
+			registerDevice:                     true,
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.TokenHandler("http://127.0.0.1:31315", &testutils.TokenHandlerOptions{
+					IDTokenClaims: []map[string]interface{}{
+						{"aud": consts.MicrosoftBrokerAppID},
+					},
+				}),
+			},
+			address: "127.0.0.1:31315",
+		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
 		"Error_when_secret_can_not_be_decrypted":            {firstMode: authmodes.Password, badFirstKey: true},
@@ -757,6 +788,8 @@ func TestIsAuthenticated(t *testing.T) {
 				forceProviderAuthentication: tc.forceProviderAuthentication,
 				extraGroups:                 tc.extraGroups,
 				ownerExtraGroups:            tc.ownerExtraGroups,
+				supportsDeviceRegistration:  tc.providerSupportsDeviceRegistration,
+				registerDevice:              tc.registerDevice,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
