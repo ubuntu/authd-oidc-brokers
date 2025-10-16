@@ -42,6 +42,12 @@ write_files:
       [org/gnome/desktop/session]
       idle-delay=uint32 0
 
+  - path: /etc/ssh/sshd_config.d/authd.conf
+    content: |
+      UsePAM yes
+      Match User *@*
+          KbdInteractiveAuthentication yes
+
 runcmd:
   # Disable apport
   - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
@@ -50,10 +56,8 @@ runcmd:
   - apt-get remove -y update-manager gnome-initial-setup
   # We don't need Firefox for the tests, so we can remove it to save some space
   - snap remove firefox --purge
-  # Configure SSH to allow interactive authentication
-  - sed -i 's/KbdInteractiveAuthentication no/KbdInteractiveAuthentication yes/' /etc/ssh/sshd_config
   # Increase the default login timeout
-  - sed -i 's/LOGIN_TIMEOUT.*/LOGIN_TIMEOUT    300/' /etc/login.defs
+  - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
   # Update dconf database
   - dconf update
 

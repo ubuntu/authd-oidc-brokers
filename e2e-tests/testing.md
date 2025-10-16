@@ -28,7 +28,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
 - Test-run dependencies:
 
     ```text
-    clang libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev tesseract-ocr python3-tk python3-gi python3-cairo xvfb ffmpeg libwebkit2gtk-4.1-0 libwebkit2gtk-4.1-dev libgtk-3-0t64 libgtk-3-dev
+    clang libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb ffmpeg gir1.2-webkit2-4.1
     ```
 
     Those are all part of the archive and can be installed on Ubuntu with:
@@ -44,7 +44,7 @@ The tests need a VM to run. This can be easily setup by using the domain definit
 1. Download the latest Ubuntu Desktop image (and resize it):
 
     ```bash
-    wget https://cloud-images.ubuntu.com/questing/current/questing-server-cloudimg-amd64.img -O {img_path}
+    wget https://cloud-images.ubuntu.com/minimal/daily/questing/current/questing-minimal-cloudimg-amd64.img -O {img_path}
 
     qemu-img resize {img_path} 10G
     ```
@@ -361,12 +361,12 @@ source {path_to_yarf_repo}/.venv/bin/activate
 
 1. In order to facilitate running the tests, the `e2e-tests/run-tests.sh` script is provided.
     - Some environment variables need to be set before running the script:
-      - E2E_USER - The username to use for the tests
-      - E2E_PASSWORD - The remote password to use for the tests
-      - BROKER - The broker to test (e.g., authd-msentraid)
+      - `E2E_USER` - The username to use for the tests
+      - `E2E_PASSWORD` - The remote password to use for the tests
+      - `BROKER` - The broker to test (e.g., authd-msentraid)
     - Optionally, you can set:
-      - SNAPSHOT_ON_FAIL - If set, a snapshot will be taken if a test fail. Default is "false".
-      - RUN_ONSCREEN - If set, the tests will run with a visible window. Default is "false" (headless).
+      - `SNAPSHOT_ON_FAIL` - If set, a snapshot will be taken if a test fail. Default is "false".
+      - `RUN_ONSCREEN` - If set, the tests will run with a visible window. Default is "false" (headless).
     - If the script is run without arguments, it will run all the tests. You can also provide a specific test file and it will run only that test.
 
     ```bash

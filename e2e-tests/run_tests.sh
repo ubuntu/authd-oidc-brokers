@@ -44,26 +44,23 @@ fi
 # Run the YARF tests
 test_results=()
 for test_file in $TESTS_TO_RUN; do
-    ln -s "${test_file}" .
-
     test_name=$(basename "${test_file}")
-    echo "Running test: ${test_name}"
+
+    ln -s "${test_file}" .
+    # Ensure the test file is removed on exit
+    trap "rm -f ${test_name}" EXIT
 
     SNAPSHOT_NAME=${BROKER}-edge-configured
     if [[ "${test_name}" == *"migration"* ]]; then
         SNAPSHOT_NAME=${BROKER}-stable-configured
     fi
-
     virsh snapshot-revert e2e-runner "${SNAPSHOT_NAME}" || true
 
-    # Temporarily allow a command that could error out so we can grab the test result.
-    set +e
+    echo "Running test: ${test_name}"
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
-    yarf --outdir "output/${test_name}" --platform=Vnc .
-    test_result=$?
+    yarf --outdir "output/${test_name}" --platform=Vnc . || test_result=$? && true
 
-    set -e
     if [ ${test_result} -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
         echo "Test failed. Saving VM snapshot as requested..."
         virsh snapshot-create-as e2e-runner "${test_name}-fail-$(date +%Y%m%d%H%M)"
@@ -75,7 +72,7 @@ for test_file in $TESTS_TO_RUN; do
     else
         test_results+=("${test_name}: OK")
     fi
-    rm "${test_name}"
+    rm -f "${test_name}"
 done
 
 for result in "${test_results[@]}"; do
