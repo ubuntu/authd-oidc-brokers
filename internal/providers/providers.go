@@ -13,12 +13,33 @@ import (
 type Provider interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
-	CheckTokenScopes(token *oauth2.Token) error
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
-	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error)
+
+	GetUserInfo(idToken info.Claimer) (info.User, error)
+
+	GetGroups(
+		ctx context.Context,
+		clientID string,
+		issuerURL string,
+		token *oauth2.Token,
+		providerMetadata map[string]interface{},
+		deviceRegistrationData []byte,
+	) ([]info.Group, error)
+
+	IsTokenExpiredError(err oauth2.RetrieveError) bool
+	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
+
+	MaybeRegisterDevice(
+		ctx context.Context,
+		token *oauth2.Token,
+		username string,
+		issuerURL string,
+		deviceRegistrationData []byte,
+	) ([]byte, func(), error)
+
 	NormalizeUsername(username string) string
 	SupportedOIDCAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
-	IsTokenExpiredError(err oauth2.RetrieveError) bool
+	SupportsDeviceRegistration() bool
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
@@ -136,10 +137,15 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		return nil, errors.New("failed to generate broker private key")
 	}
 
+	clientID := cfg.clientID
+	if opts.provider.SupportsDeviceRegistration() && cfg.registerDevice {
+		clientID = consts.MicrosoftBrokerAppID
+	}
+
 	b = &Broker{
 		cfg:        cfg,
 		provider:   opts.provider,
-		oidcCfg:    oidc.Config{ClientID: cfg.clientID},
+		oidcCfg:    oidc.Config{ClientID: clientID},
 		privateKey: privateKey,
 
 		currentSessions:   make(map[string]session),
@@ -182,12 +188,17 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		s.isOffline = true
 	}
 
+	scopes := append(consts.DefaultScopes, b.provider.AdditionalScopes()...)
+	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+		scopes = consts.MicrosoftBrokerAppScopes
+	}
+
 	if s.oidcServer != nil {
 		s.oauth2Config = oauth2.Config{
 			ClientID:     b.oidcCfg.ClientID,
 			ClientSecret: b.cfg.clientSecret,
 			Endpoint:     s.oidcServer.Endpoint(),
-			Scopes:       append(consts.DefaultScopes, b.provider.AdditionalScopes()...),
+			Scopes:       scopes,
 		}
 	}
 
@@ -246,11 +257,13 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 func (b *Broker) availableAuthModes(session session) (availableModes []string, err error) {
 	if len(session.nextAuthModes) > 0 {
 		for _, mode := range session.nextAuthModes {
-			if !authModeIsAvailable(session, mode) {
-				log.Infof(context.Background(), "Authentication mode %q is not available", mode)
+			if !b.authModeIsAvailable(session, mode) {
 				continue
 			}
 			availableModes = append(availableModes, mode)
+		}
+		if availableModes == nil {
+			log.Warningf(context.Background(), "None of the next auth modes are available: %v", session.nextAuthModes)
 		}
 		return availableModes, nil
 	}
@@ -270,7 +283,7 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 		// when it's not necessary.
 		modes := append([]string{authmodes.Password}, b.provider.SupportedOIDCAuthModes()...)
 		for _, mode := range modes {
-			if authModeIsAvailable(session, mode) {
+			if b.authModeIsAvailable(session, mode) {
 				availableModes = append(availableModes, mode)
 			}
 		}
@@ -278,14 +291,73 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 	}
 }
 
-func authModeIsAvailable(session session, authMode string) bool {
+func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 	switch authMode {
 	case authmodes.Password:
-		return tokenExists(session) && passwordFileExists(session)
+		if !tokenExists(session) {
+			log.Debugf(context.Background(), "Token does not exist for user %q, so local password authentication is not available", session.username)
+			return false
+		}
+
+		if !passwordFileExists(session) {
+			log.Debugf(context.Background(), "Password file does not exist for user %q, so local password authentication is not available", session.username)
+			return false
+		}
+
+		authInfo, err := token.LoadAuthInfo(session.tokenPath)
+		if err != nil {
+			log.Warningf(context.Background(), "Could not load token, so local password authentication is not available: %v", err)
+			return false
+		}
+
+		if !b.provider.SupportsDeviceRegistration() {
+			// If the provider does not support device registration,
+			// we can always use the token for local password authentication.
+			log.Debugf(context.Background(), "Provider does not support device registration, so local password authentication is available for user %q", session.username)
+			return true
+		}
+
+		if session.isOffline {
+			// If the session is in offline mode, we can't register the device anyway,
+			// so we can allow the user to use local password authentication.
+			log.Debugf(context.Background(), "Session is in offline mode, so local password authentication is available for user %q", session.username)
+			return true
+		}
+
+		isTokenForDeviceRegistration, err := b.provider.IsTokenForDeviceRegistration(authInfo.Token)
+		if err != nil {
+			log.Warningf(context.Background(), "Could not check if token is for device registration, so local password authentication is not available: %v", err)
+			return false
+		}
+
+		if b.cfg.registerDevice && !isTokenForDeviceRegistration {
+			// TODO: We might want to display a message to the user in this case
+			log.Noticef(context.Background(), "Token exists for user %q, but it cannot be used for device registration, so local password authentication is not available", session.username)
+			return false
+		}
+		if !b.cfg.registerDevice && isTokenForDeviceRegistration {
+			// TODO: We might want to display a message to the user in this case
+			log.Noticef(context.Background(), "Token exists for user %q, but it requires device registration, so local password authentication is not available", session.username)
+			return false
+		}
+
+		return true
 	case authmodes.NewPassword:
 		return true
 	case authmodes.Device, authmodes.DeviceQr:
-		return session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" && !session.isOffline
+		if session.oidcServer == nil {
+			log.Debugf(context.Background(), "OIDC server is not initialized, so device authentication is not available")
+			return false
+		}
+		if session.oidcServer.Endpoint().DeviceAuthURL == "" {
+			log.Debugf(context.Background(), "OIDC server does not support device authentication, so device authentication is not available")
+			return false
+		}
+		if session.isOffline {
+			log.Noticef(context.Background(), "Session is in offline mode, so device authentication is not available")
+			return false
+		}
+		return true
 	}
 	return false
 }
@@ -480,16 +552,15 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	case <-authDone:
 	case <-ctx.Done():
 		// We can ignore the error here since the message is constant.
-		msg, _ := json.Marshal(errorMessage{Message: "authentication request cancelled"})
+		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
 		return AuthCancelled, string(msg), ctx.Err()
 	}
 
-	switch access {
-	case AuthRetry:
+	if access == AuthRetry {
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
 			access = AuthDenied
-			iadResponse = errorMessage{Message: "maximum number of attempts reached"}
+			iadResponse = errorMessage{Message: "Maximum number of authentication attempts reached"}
 		}
 	}
 
@@ -509,9 +580,11 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	return access, data, nil
 }
 
-func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
-	defer decorateErrorMessage(&data, "authentication failure")
+func unexpectedErrMsg(msg string) errorMessage {
+	return errorMessage{Message: fmt.Sprintf("An unexpected error occurred: %s. Please report this error on https://github.com/ubuntu/authd/issues", msg)}
+}
 
+func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
 	rawSecret, ok := authData[AuthDataSecret]
 	if !ok {
 		rawSecret = authData[AuthDataSecretOld]
@@ -521,167 +594,240 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	secret, err := decodeRawSecret(b.privateKey, rawSecret)
 	if err != nil {
 		log.Errorf(context.Background(), "could not decode secret: %s", err)
-		return AuthRetry, errorMessage{Message: "could not decode secret"}
+		return AuthRetry, unexpectedErrMsg("could not decode secret")
 	}
 
-	var authInfo *token.AuthCachedInfo
 	switch session.selectedMode {
 	case authmodes.Device, authmodes.DeviceQr:
-		response := session.deviceAuthResponse
-		if response == nil {
-			log.Error(context.Background(), "could not get device auth response")
-			return AuthDenied, errorMessage{Message: "could not get required response"}
+		return b.deviceAuth(ctx, session)
+	case authmodes.Password:
+		return b.passwordAuth(ctx, session, secret)
+	case authmodes.NewPassword:
+		return b.newPassword(session, secret)
+	default:
+		log.Errorf(context.Background(), "unknown authentication mode %q", session.selectedMode)
+		return AuthDenied, unexpectedErrMsg("unknown authentication mode")
+	}
+}
+
+func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
+	response := session.deviceAuthResponse
+	if response == nil {
+		log.Error(context.Background(), "device auth response is not set")
+		return AuthDenied, unexpectedErrMsg("device auth response is not set")
+	}
+
+	if response.Expiry.IsZero() {
+		response.Expiry = time.Now().Add(time.Hour)
+		log.Debugf(context.Background(), "Device code does not have an expiry time, using default of %s", response.Expiry)
+	} else {
+		log.Debugf(context.Background(), "Device code expiry time: %s", response.Expiry)
+	}
+	expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
+	defer cancel()
+
+	// The default interval is 5 seconds, which means the user has to wait up to 5 seconds after
+	// successful authentication. We're reducing the interval to 1 second to improve UX a bit.
+	response.Interval = 1
+
+	log.Debug(ctx, "Polling to exchange device code for token...")
+	t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
+	if err != nil {
+		log.Errorf(context.Background(), "Error retrieving access token: %s", err)
+		return AuthRetry, errorMessage{Message: "Error retrieving access token. Please try again."}
+	}
+	log.Debug(ctx, "Exchanged device code for token.")
+
+	rawIDToken, ok := t.Extra("id_token").(string)
+	if !ok {
+		log.Error(context.Background(), "token response does not contain an ID token")
+		return AuthDenied, unexpectedErrMsg("token response does not contain an ID token")
+	}
+
+	authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
+
+	authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
+	if err != nil {
+		log.Errorf(context.Background(), "could not get provider metadata: %s", err)
+		return AuthDenied, unexpectedErrMsg("could not get provider metadata")
+	}
+
+	authInfo.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	if err != nil {
+		log.Errorf(context.Background(), "could not get user info: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Could not get user info")
+	}
+
+	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
+		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
+	}
+
+	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+		// Load existing device registration data if there is any, to avoid re-registering the device.
+		var deviceRegistrationData []byte
+		oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath)
+		if err == nil {
+			deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
 		}
 
-		if response.Expiry.IsZero() {
-			response.Expiry = time.Now().Add(time.Hour)
-			log.Debugf(context.Background(), "Device code does not have an expiry time, using default of %s", response.Expiry)
-		} else {
-			log.Debugf(context.Background(), "Device code expiry time: %s", response.Expiry)
-		}
-		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
-		defer cancel()
-
-		// The default interval is 5 seconds, which means the user has to wait up to 5 seconds after
-		// successful authentication. We're reducing the interval to 1 second to improve UX a bit.
-		response.Interval = 1
-
-		log.Debug(ctx, "Polling to exchange device code for token...")
-		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
+		var cleanup func()
+		authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx, t,
+			session.username,
+			b.cfg.issuerURL,
+			deviceRegistrationData,
+		)
 		if err != nil {
-			log.Errorf(context.Background(), "could not authenticate user remotely: %s", err)
-			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
+			log.Errorf(context.Background(), "error registering device: %s", err)
+			return AuthDenied, errorMessage{Message: "Error registering device"}
 		}
-		log.Debug(ctx, "Exchanged device code for token.")
+		defer cleanup()
 
-		if err = b.provider.CheckTokenScopes(t); err != nil {
-			log.Warningf(context.Background(), "error checking token scopes: %s", err)
+		// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+		if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
 		}
+	}
 
-		rawIDToken, ok := t.Extra("id_token").(string)
-		if !ok {
-			log.Error(context.Background(), "could not get ID token")
-			return AuthDenied, errorMessage{Message: "could not get ID token"}
-		}
+	// We can only fetch the groups after registering the device, because the token acquired for device registration
+	// cannot be used with the Microsoft Graph API and a new token must be acquired for the Graph API.
+	authInfo.UserInfo.Groups, err = b.getGroups(ctx, session, authInfo)
+	if err != nil {
+		log.Errorf(context.Background(), "failed to get groups: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
+	}
 
-		authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
+	// Store the auth info in the session so that we can use it when handling the
+	// next IsAuthenticated call for the new password mode.
+	session.authInfo = authInfo
+	session.nextAuthModes = []string{authmodes.NewPassword}
 
-		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
-		if err != nil {
-			log.Errorf(context.Background(), "could not get provider metadata: %s", err)
-			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
-		}
+	return AuthNext, nil
+}
 
-		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, authInfo)
-		if err != nil {
-			log.Errorf(context.Background(), "could not fetch user info: %s", err)
-			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
-		}
+func (b *Broker) passwordAuth(ctx context.Context, session *session, secret string) (string, isAuthenticatedDataResponse) {
+	ok, err := password.CheckPassword(secret, session.passwordPath)
+	if err != nil {
+		log.Error(context.Background(), err.Error())
+		return AuthDenied, unexpectedErrMsg("could not check password")
+	}
+	if !ok {
+		log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
+		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
+	}
 
-		if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-			log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-			return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
-		}
+	authInfo, err := token.LoadAuthInfo(session.tokenPath)
+	if err != nil {
+		log.Error(context.Background(), err.Error())
+		return AuthDenied, unexpectedErrMsg("could not load stored token")
+	}
 
+	// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
+	// want the method call to return an error if refreshing the token or user info fails).
+	if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
 		// Store the auth info in the session so that we can use it when handling the
 		// next IsAuthenticated call for the new password mode.
 		session.authInfo = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
-
 		return AuthNext, nil
+	}
 
-	case authmodes.Password:
-		ok, err := password.CheckPassword(secret, session.passwordPath)
-		if err != nil {
-			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: "could not check password file"}
-		}
-		if !ok {
-			log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
-			return AuthRetry, errorMessage{Message: "incorrect password"}
-		}
+	if b.cfg.forceProviderAuthentication && session.isOffline {
+		log.Error(context.Background(), "Remote authentication failed: force_provider_authentication is enabled, but the identity provider is not reachable")
+		return AuthDenied, errorMessage{Message: "Remote authentication failed: identity provider is not reachable"}
+	}
 
-		authInfo, err = token.LoadAuthInfo(session.tokenPath)
-		if err != nil {
-			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: "could not load stored token"}
-		}
-
-		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
-		// want the method call to return an error if refreshing the token or user info fails).
-		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
-			// Store the auth info in the session so that we can use it when handling the
-			// next IsAuthenticated call for the new password mode.
-			session.authInfo = authInfo
-			session.nextAuthModes = []string{authmodes.NewPassword}
-			return AuthNext, nil
-		}
-
-		if b.cfg.forceProviderAuthentication && session.isOffline {
-			log.Error(context.Background(), "Login failed: force_provider_authentication is enabled, but the provider is not reachable")
-			return AuthDenied, errorMessage{Message: "could not refresh token: provider is not reachable"}
-		}
-
-		// Refresh the token if we're online even if the token has not expired
-		if b.cfg.forceProviderAuthentication || !session.isOffline {
-			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
-			var retrieveErr *oauth2.RetrieveError
-			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
-				log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
-				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-				return AuthNext, errorMessage{Message: "refresh token expired, please authenticate again using device authentication"}
-			}
-			if err != nil {
-				log.Error(context.Background(), err.Error())
-				return AuthDenied, errorMessage{Message: "could not refresh token"}
-			}
-		}
-
-		// Try to refresh the user info
-		userInfo, err := b.fetchUserInfo(ctx, session, authInfo)
-		if err != nil && authInfo.UserInfo.Name == "" {
-			// We don't have a valid user info, so we can't proceed.
-			log.Errorf(context.Background(), "could not fetch user info: %s", err)
-			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+	// Refresh the token if we're online even if the token has not expired
+	if b.cfg.forceProviderAuthentication || !session.isOffline {
+		authInfo, err = b.refreshToken(ctx, session, authInfo)
+		var retrieveErr *oauth2.RetrieveError
+		if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
+			log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
+			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+			return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again using device authentication."}
 		}
 		if err != nil {
-			// We couldn't fetch the user info, but we have a valid cached one.
-			log.Warningf(context.Background(), "Could not fetch user info: %v. Using cached user info.", err)
-		} else {
-			authInfo.UserInfo = userInfo
-		}
-
-	case authmodes.NewPassword:
-		if secret == "" {
-			return AuthRetry, errorMessage{Message: "empty secret"}
-		}
-
-		// This mode must always come after an authentication mode, so we should have auth info from the previous mode
-		// stored in the session.
-		authInfo = session.authInfo
-		if authInfo == nil {
-			log.Error(context.Background(), "could not get required information")
-			return AuthDenied, errorMessage{Message: "could not get required information"}
-		}
-
-		if err = password.HashAndStorePassword(secret, session.passwordPath); err != nil {
-			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: "could not store password"}
+			log.Errorf(context.Background(), "Failed to refresh token: %s", err)
+			return AuthDenied, errorMessage{Message: "Failed to refresh token"}
 		}
 	}
 
+	// If device registration is enabled, ensure that the device is registered.
+	if b.provider.SupportsDeviceRegistration() && !session.isOffline && b.cfg.registerDevice {
+		var cleanup func()
+		authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx,
+			authInfo.Token,
+			session.username,
+			b.cfg.issuerURL,
+			authInfo.DeviceRegistrationData,
+		)
+		if err != nil {
+			log.Errorf(context.Background(), "error registering device: %s", err)
+			return AuthDenied, errorMessage{Message: "Error registering device"}
+		}
+		defer cleanup()
+
+		// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+		if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+	}
+
+	// Try to refresh the groups
+	groups, err := b.getGroups(ctx, session, authInfo)
+	if errors.Is(err, himmelblau.ErrDeviceDisabled) {
+		// The device is disabled, deny login
+		log.Errorf(context.Background(), "Login failed: %s", err)
+		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
+	}
+	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
+		log.Errorf(context.Background(), "Login failed: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Invalid redirect URI")
+	}
+	var tokenAcquisitionError himmelblau.TokenAcquisitionError
+	if errors.As(err, &tokenAcquisitionError) {
+		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
+		// The token acquisition failed unexpectedly.
+		// One possible reason is that the device was deleted by an administrator in Entra ID.
+		// In this case, the user can perform device authentication again to get a new token
+		// and register the device again, allowing the user to log in.
+		// We delete the device registration data to cause device authentication to re-register the device.
+		authInfo.DeviceRegistrationData = nil
+		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+
+		session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+		msg := "Authentication failed due to a token issue. Please try again using device authentication."
+		return AuthNext, errorMessage{Message: msg}
+	}
+	if err != nil {
+		// We couldn't fetch the groups, but we have valid cached ones.
+		log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
+	} else {
+		authInfo.UserInfo.Groups = groups
+	}
+
+	return b.finishAuth(session, authInfo)
+}
+
+func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
 	if b.cfg.shouldRegisterOwner() {
 		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
 			// The user is not allowed if we fail to create the owner-autoregistration file.
 			// Otherwise the owner might change if the broker is restarted.
 			log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
-			return AuthDenied, errorMessage{Message: "could not register the owner"}
+			return AuthDenied, unexpectedErrMsg("failed to assign the owner role")
 		}
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
 		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-		return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
+		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
 
 	// Add extra groups to the user info.
@@ -703,11 +849,32 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-		log.Error(context.Background(), err.Error())
-		return AuthDenied, errorMessage{Message: "could not cache user info"}
+		log.Errorf(context.Background(), "Failed to store token: %s", err)
+		return AuthDenied, unexpectedErrMsg("failed to store token")
 	}
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+}
+
+func (b *Broker) newPassword(session *session, secret string) (string, isAuthenticatedDataResponse) {
+	if secret == "" {
+		return AuthRetry, unexpectedErrMsg("empty secret")
+	}
+
+	// This mode must always come after an authentication mode, so we should have auth info from the previous mode
+	// stored in the session.
+	authInfo := session.authInfo
+	if authInfo == nil {
+		log.Error(context.Background(), "auth info is not set")
+		return AuthDenied, unexpectedErrMsg("auth info is not set")
+	}
+
+	if err := password.HashAndStorePassword(secret, session.passwordPath); err != nil {
+		log.Errorf(context.Background(), "Failed to store password: %s", err)
+		return AuthDenied, unexpectedErrMsg("failed to store password")
+	}
+
+	return b.finishAuth(session, authInfo)
 }
 
 // userNameIsAllowed checks whether the user's username is allowed to access the machine.
@@ -839,13 +1006,13 @@ func (b *Broker) updateSession(sessionID string, session session) error {
 }
 
 // refreshToken refreshes the OAuth2 token and returns the updated AuthCachedInfo.
-func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
+func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 	// set cached token expiry time to one hour in the past
 	// this makes sure the token is refreshed even if it has not 'actually' expired
 	oldToken.Token.Expiry = time.Now().Add(-time.Hour)
-	oauthToken, err := oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
+	oauthToken, err := session.oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
 	if err != nil {
 		return nil, err
 	}
@@ -859,21 +1026,28 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.provider)
 	t.ProviderMetadata = oldToken.ProviderMetadata
-	t.UserInfo = oldToken.UserInfo
+	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
+
+	t.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	if err != nil {
+		return nil, err
+	}
+
+	t.UserInfo.Groups = oldToken.UserInfo.Groups
+
 	return t, nil
 }
 
-func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.AuthCachedInfo) (userInfo info.User, err error) {
-	if session.isOffline {
-		return info.User{}, errors.New("session is in offline mode")
-	}
-
-	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
+// userInfoFromIDToken verifies and parses the raw ID token and returns the user info from it.
+// Note that verifying the ID token requires a working network connection to the provider's JWKs endpoint,
+// so make sure to only call this function if the session is online.
+func (b *Broker) userInfoFromIDToken(ctx context.Context, session *session, rawIDToken string) (info.User, error) {
+	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken, t.ProviderMetadata)
+	userInfo, err := b.provider.GetUserInfo(idToken)
 	if err != nil {
 		return info.User{}, err
 	}
@@ -887,28 +1061,29 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
 	}
 
-	return userInfo, err
+	return userInfo, nil
 }
 
-// decorateErrorMessage decorates the isAuthenticatedDataResponse with the provided message, if it's an errorMessage.
-func decorateErrorMessage(data *isAuthenticatedDataResponse, msg string) {
-	if *data == nil {
-		return
+func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthCachedInfo) ([]info.Group, error) {
+	if session.isOffline {
+		return nil, errors.New("session is in offline mode")
 	}
-	errMsg, ok := (*data).(errorMessage)
-	if !ok {
-		return
-	}
-	errMsg.Message = fmt.Sprintf("%s: %s", msg, errMsg.Message)
-	*data = errMsg
+
+	return b.provider.GetGroups(ctx,
+		b.cfg.clientID,
+		b.cfg.issuerURL,
+		t.Token,
+		t.ProviderMetadata,
+		t.DeviceRegistrationData,
+	)
 }
 
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
 // the provided fallback message.
 func errorMessageForDisplay(err error, fallback string) errorMessage {
-	var e *providerErrors.ForDisplayError
-	if errors.As(err, &e) {
-		return errorMessage{Message: e.Error()}
+	var forDisplayErr *providerErrors.ForDisplayError
+	if errors.As(err, &forDisplayErr) {
+		return errorMessage{Message: forDisplayErr.Error()}
 	}
 	return errorMessage{Message: fallback}
 }

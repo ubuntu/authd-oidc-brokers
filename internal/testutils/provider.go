@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +30,8 @@ import (
 const (
 	// ExpiredRefreshToken is used to test the expired refresh token error.
 	ExpiredRefreshToken = "expired-refresh-token"
+	// IsForDeviceRegistrationClaim is the claim used to indicate to the mock provider if the token is for device registration.
+	IsForDeviceRegistrationClaim = "is_for_device_registration"
 )
 
 // MockKey is the RSA key used to sign the JWTs for the mock provider.
@@ -349,35 +350,16 @@ func ExpiryDeviceAuthHandler() EndpointHandler {
 // MockProvider is a mock that implements the Provider interface.
 type MockProvider struct {
 	genericprovider.GenericProvider
-	Scopes           []string
-	Options          []oauth2.AuthCodeOption
-	GetGroupsFunc    func() ([]info.Group, error)
-	FirstCallDelay   int
-	SecondCallDelay  int
-	GetUserInfoFails bool
+	Scopes                             []string
+	Options                            []oauth2.AuthCodeOption
+	GetGroupsFunc                      func() ([]info.Group, error)
+	FirstCallDelay                     int
+	SecondCallDelay                    int
+	GetGroupsFails                     bool
+	ProviderSupportsDeviceRegistration bool
 
 	numCalls     int
 	numCallsLock sync.Mutex
-}
-
-// CheckTokenScopes checks if the token has the required scopes.
-func (p *MockProvider) CheckTokenScopes(token *oauth2.Token) error {
-	scopesStr, ok := token.Extra("scope").(string)
-	if !ok {
-		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
-	}
-
-	scopes := strings.Split(scopesStr, " ")
-	var missingScopes []string
-	for _, s := range consts.DefaultScopes {
-		if !slices.Contains(scopes, s) {
-			missingScopes = append(missingScopes, s)
-		}
-	}
-	if len(missingScopes) > 0 {
-		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
-	}
-	return nil
 }
 
 // AdditionalScopes returns the additional scopes required by the provider.
@@ -406,26 +388,11 @@ func (p *MockProvider) GetMetadata(provider *oidc.Provider) (map[string]interfac
 	return nil, nil
 }
 
-// GetUserInfo is a no-op when no specific provider is in use.
-func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
-	if p.GetUserInfoFails {
-		return info.User{}, errors.New("error requested in the mock")
-	}
-
+// GetUserInfo returns the user info parsed from the ID token.
+func (p *MockProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
-	}
-
-	userGroups := []info.Group{
-		{Name: "remote-test-group", UGID: "12345"},
-		{Name: "local-test-group", UGID: ""},
-	}
-	if p.GetGroupsFunc != nil {
-		userGroups, err = p.GetGroupsFunc()
-		if err != nil {
-			return info.User{}, err
-		}
 	}
 
 	p.numCallsLock.Lock()
@@ -446,8 +413,49 @@ func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Toke
 		userClaims.Sub,
 		userClaims.Shell,
 		userClaims.Gecos,
-		userGroups,
+		nil,
 	), nil
+}
+
+// GetGroups returns the groups the user is a member of.
+func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte) ([]info.Group, error) {
+	if p.GetGroupsFails {
+		return nil, errors.New("error requested in the mock")
+	}
+
+	userGroups := []info.Group{
+		{Name: "remote-test-group", UGID: "12345"},
+		{Name: "local-test-group", UGID: ""},
+	}
+
+	var err error
+	if p.GetGroupsFunc != nil {
+		userGroups, err = p.GetGroupsFunc()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return userGroups, nil
+}
+
+// IsTokenForDeviceRegistration checks if the token is for device registration.
+func (p *MockProvider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
+	if token == nil {
+		return false, errors.New("token is nil")
+	}
+
+	isForDeviceRegistration, ok := token.Extra(IsForDeviceRegistrationClaim).(bool)
+	if !ok {
+		return false, fmt.Errorf("token does not contain %q claim", IsForDeviceRegistrationClaim)
+	}
+
+	return isForDeviceRegistration, nil
+}
+
+// SupportsDeviceRegistration checks if the provider supports device registration.
+func (p *MockProvider) SupportsDeviceRegistration() bool {
+	return p.ProviderSupportsDeviceRegistration
 }
 
 type claims struct {
