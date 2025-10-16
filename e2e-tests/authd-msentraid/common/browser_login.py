@@ -14,7 +14,7 @@ from gi.repository import Gdk, Gtk  # type: ignore # The interpreter usually doe
 #       browser_login.py  <- this file
 #   authd-common/
 #      BrowserWindow.py <- the dependency
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../authd-common")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "authd-common")))
 from BrowserWindow import BrowserWindow, ascii_string_to_key_events  # type: ignore # This is resolved at runtime
 
 
