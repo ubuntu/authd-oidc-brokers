@@ -83,7 +83,6 @@ Run Command In Terminal
     Open Terminal
     Hid.Type String   clear && ${command} & clear && wait && echo cmd-finished
     Hid.Keys Combo    Return
-    BuiltIn.Sleep    2
     Match Text    cmd-finished    600
     Close Focused Window
 
