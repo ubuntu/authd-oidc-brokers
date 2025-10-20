@@ -106,6 +106,11 @@ func (p GenericProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
 	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }
 
+// IsUserDisabledError returns false, as the generic provider does not support disabling users.
+func (p GenericProvider) IsUserDisabledError(_ oauth2.RetrieveError) bool {
+	return false
+}
+
 // SupportsDeviceRegistration returns false, as the generic provider does not support device registration.
 func (p GenericProvider) SupportsDeviceRegistration() bool {
 	return false

@@ -533,3 +533,8 @@ func (c azureTokenCredential) GetToken(_ context.Context, _ policy.TokenRequestO
 func (p *Provider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
 	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }
+
+// IsUserDisabledError returns true if the reason for the error is that the user is disabled.
+func (p *Provider) IsUserDisabledError(err oauth2.RetrieveError) bool {
+	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50057:")
+}
