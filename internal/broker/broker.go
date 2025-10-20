@@ -743,12 +743,12 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		authInfo, err = b.refreshToken(ctx, session, authInfo)
 		var retrieveErr *oauth2.RetrieveError
 		if errors.As(err, &retrieveErr) {
-			if b.provider.IsTokenExpiredError(*retrieveErr) {
+			if b.provider.IsTokenExpiredError(retrieveErr) {
 				log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 				return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again using device authentication."}
 			}
-			if b.provider.IsUserDisabledError(*retrieveErr) {
+			if b.provider.IsUserDisabledError(retrieveErr) {
 				log.Error(context.Background(), retrieveErr.Error())
 				log.Errorf(context.Background(), "Login failed: User %q is disabled in Microsoft Entra ID, please contact your administrator.", session.username)
 				return AuthDenied, errorMessage{Message: "This user is disabled in Microsoft Entra ID, please contact your administrator."}
