@@ -743,6 +743,11 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		return AuthDenied, errorMessage{Message: "This user is disabled in Microsoft Entra ID. Please contact your administrator or try again with a working network connection."}
 	}
 
+	if authInfo.DeviceIsDisabled && session.isOffline {
+		log.Errorf(context.Background(), "Login denied: device %q is disabled in Microsoft Entra ID and session is offline", session.username)
+		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID. Please contact your administrator or try again with a working network connection."}
+	}
+
 	// Refresh the token if we're online even if the token has not expired
 	if b.cfg.forceProviderAuthentication || !session.isOffline {
 		oldAuthInfo := authInfo
@@ -801,6 +806,14 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	if errors.Is(err, himmelblau.ErrDeviceDisabled) {
 		// The device is disabled, deny login
 		log.Errorf(context.Background(), "Login failed: %s", err)
+
+		// Store the information that the device is disabled, so that we can deny login on subsequent offline attempts.
+		authInfo.DeviceIsDisabled = true
+		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", err)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+
 		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
 	}
 	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {

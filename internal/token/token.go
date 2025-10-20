@@ -20,6 +20,7 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
+	DeviceIsDisabled       bool
 	UserIsDisabled         bool
 }
 
