@@ -54,5 +54,6 @@ func CheckPassword(password, path string) (bool, error) {
 }
 
 func hashPassword(password string, salt []byte) []byte {
+	// If you change these parameters, update the section in the security overview doc.
 	return argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
 }

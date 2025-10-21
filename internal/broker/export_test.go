@@ -1,11 +1,7 @@
 package broker
 
 import (
-	"context"
 	"sync"
-
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
-	tokenPkg "github.com/ubuntu/authd-oidc-brokers/internal/token"
 )
 
 func (cfg *Config) Init() {
@@ -22,6 +18,10 @@ func (cfg *Config) SetIssuerURL(issuerURL string) {
 
 func (cfg *Config) SetForceProviderAuthentication(value bool) {
 	cfg.forceProviderAuthentication = value
+}
+
+func (cfg *Config) SetRegisterDevice(value bool) {
+	cfg.registerDevice = value
 }
 
 func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
@@ -159,21 +159,6 @@ func (b *Broker) SetAvailableMode(sessionID, mode string) error {
 	s.authModes = []string{mode}
 
 	return b.updateSession(sessionID, s)
-}
-
-// FetchUserInfo exposes the broker's fetchUserInfo method for tests.
-func (b *Broker) FetchUserInfo(sessionID string, token *tokenPkg.AuthCachedInfo) (info.User, error) {
-	s, err := b.getSession(sessionID)
-	if err != nil {
-		return info.User{}, err
-	}
-
-	uInfo, err := b.fetchUserInfo(context.TODO(), &s, token)
-	if err != nil {
-		return info.User{}, err
-	}
-
-	return uInfo, err
 }
 
 // IsOffline returns whether the given session is offline or an error if the session does not exist.

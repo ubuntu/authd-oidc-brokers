@@ -3,8 +3,4 @@ uuid: valid-sub
 home: /home/valid-user
 shell: /bin/bash
 gecos: Valid User
-groups:
-    - name: group1
-      ugid: id1
-    - name: group2
-      ugid: id2
+groups: []
