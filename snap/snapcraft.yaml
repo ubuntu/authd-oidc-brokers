@@ -1,7 +1,27 @@
-name: authd-oidc
-summary: OIDC Broker for authd
+name: authd-msentraid
+summary: Authd - MS Entra ID Cloud Authentication for Ubuntu
 description: |
-  Broker that enables OIDC authentication for authd.
+  Authd is a powerful authentication service for Ubuntu, designed to integrate with cloud identity providers like
+  Microsoft Entra ID. It delivers a secure, flexible solution for organizations and individuals who are transitioning
+  to cloud-based identity management on Ubuntu workstations and servers.
+  Authd uses the OAuth Device Authorization Grant and ensures a consistent and secure login experience across
+  Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
+
+  Key Features
+  * Cloud identity provider Integration: Connects with Microsoft Entra ID
+  * Secure Login: Authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
+    and security.
+  * Open-Source: Free and community-driven, with contributions welcomed.
+  * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
+  * Authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
+    Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
+    contribute or provide feedback.
+icon: snap/logo.png
+website:
+  - https://github.com/ubuntu/authd-oidc-brokers
+  - https://github.com/ubuntu/authd
+issues: https://github.com/ubuntu/authd/issues
+source-code: https://github.com/ubuntu/authd-oidc-brokers/tree/msentraid
 adopt-info: version
 grade: stable
 base: core24
@@ -9,8 +29,8 @@ confinement: strict
 license: GPL-3.0
 
 apps:
-  authd-oidc:
-    command: bin/authd-oidc
+  authd-msentraid:
+    command: bin/authd-msentraid
     daemon: dbus
     slots:
       - dbus-authd
@@ -18,28 +38,60 @@ apps:
       - network
     restart-condition: always
     activates-on: [dbus-authd]
+    environment:
+      SYSLOG_IDENTIFIER: authd-msentraid
 
 slots:
   dbus-authd:
     interface: dbus
     bus: system
-    name: com.ubuntu.authd.Oidc
+    name: com.ubuntu.authd.MSEntraID
 
 parts:
+  libhimmelblau:
+    source: ./third_party/libhimmelblau
+    plugin: rust
+    build-packages:
+      - libssl-dev
+    override-build: |
+      cargo install cargo-c
+      cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of
+      echo "Installing libhimmelblau.so and himmelblau.h"
+      TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
+      install -D target/${TARGET_TRIPLE}/release/libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so.0
+      ln -s libhimmelblau.so.0 ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so
+      install -D target/${TARGET_TRIPLE}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
+    prime:
+      - -include/**
+      - -lib/**.so
   broker:
     source: .
     source-type: local
     plugin: go
+    go-buildtags: [withmsentraid]
     build-snaps:
-      - go
+      - go          
+    after:
+      - libhimmelblau
+      - version
     build-environment:
       - GOFLAGS: "-tags=release"
+      # Add libhimmelblau to the CFLAGS and LDFLAGS so that it can be found by the Go linker.
+      - CGO_CFLAGS: -I${CRAFT_STAGE}/include
+      - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau      
+    override-build: |
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+
+      go mod download all
+      go mod vendor
+      go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
   config:
     source: conf/
     source-type: local
     plugin: dump
     organize:
-      "authd.conf": "conf/authd/oidc.conf"
+      "authd.conf": "conf/authd/msentraid.conf"
       "broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
   # SemVer comparison helper
