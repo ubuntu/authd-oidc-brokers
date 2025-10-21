@@ -108,7 +108,7 @@ The tests need a VM to run. This can be easily setup by using the domain definit
 
 Now that the VM is ready, we need to install authd and the brokers we want to test.
 
-:memo: **Note:** You can find scripts for the installation processes at the [end of the section](#scripts)
+:memo: **Note:** You can find scripts for the installation processes at the [end of the section](#Scripts-to-automate-the-installation-and-configuration-of-authd-and-brokers).
 
 #### 1. Install authd (stable and edge versions)
 
@@ -224,7 +224,7 @@ sleep 120s
 virsh snapshot-create-as e2e-runner --name "<broker>-<channel>-configured" --reuse-external
 ```
 
-#### Scripts to automate the installation and configuration of authd and brokers {#scripts}
+#### Scripts to automate the installation and configuration of authd and brokers
 
 ##### Script to install authd (both stable and edge versions)
 
