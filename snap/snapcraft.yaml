@@ -55,6 +55,8 @@ parts:
     go-buildtags: [withgoogle]
     build-snaps:
       - go
+    build-environment:
+      - GOFLAGS: "-tags=release"
     override-build: |
       go mod download all
       go mod vendor

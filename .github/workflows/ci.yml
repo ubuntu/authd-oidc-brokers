@@ -13,6 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Build libhimmelblau
+        # The code sanity check fails if himmelblau.h does not exist, so we generate it first.
+        run: go generate ./internal/providers/msentraid/...
+
       - name: Go code sanity check
         uses: canonical/desktop-engineering/gh-actions/go/code-sanity@v2
         with:
@@ -22,8 +29,14 @@ jobs:
   go-tests:
     name: "Go: Tests"
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
+    strategy:
+      fail-fast: false
+      matrix:
+        test: [ "coverage", "asan" ]
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -36,12 +49,16 @@ jobs:
           sudo apt-get install -y git-delta
 
       - name: Install coverage collection dependencies
+        if: matrix.test == 'coverage'
         run: |
           set -eu
 
           go install github.com/AlekSi/gocov-xml@latest
           go install github.com/axw/gocov/gocov@latest
           dotnet tool install -g dotnet-reportgenerator-globaltool
+
+      - name: Build libhimmelblau
+        run: go generate ./internal/providers/msentraid/...
 
       - name: Prepare tests artifacts path
         run: |
@@ -54,6 +71,7 @@ jobs:
         uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main
 
       - name: Run tests (with coverage collection)
+        if: matrix.test == 'coverage'
         run: |
           set -eu
 
@@ -86,7 +104,54 @@ jobs:
           # Store the coverage directory for the next steps
           echo COVERAGE_DIR="${codecov_dir}" >> ${GITHUB_ENV}
 
+      - name: Run msentraid tests (with Address Sanitizer)
+        if: matrix.test == 'asan'
+        env:
+          # Do not optimize, keep debug symbols and frame pointer for better
+          # stack trace information in case of ASAN errors.
+          CGO_CFLAGS: "-O0 -g3 -fno-omit-frame-pointer"
+          GO_TESTS_TIMEOUT: 30m
+          # Use these flags to give ASAN a better time to unwind the stack trace
+          GO_GC_FLAGS: -N -l
+        run: |
+          # Print executed commands to ease debugging
+          set -x
+
+          # For llvm-symbolizer
+          sudo apt-get install -y llvm
+
+          # We only run the msentraid tests with ASAN because only these use cgo.
+          pushd ./internal/providers/msentraid
+          go test -asan -gcflags=all="${GO_GC_FLAGS}" -c
+          go tool test2json -p internal/providers/msentraid ./msentraid.test \
+            -test.v=test2json \
+            -test.failfast \
+            -test.timeout ${GO_TESTS_TIMEOUT} | \
+          gotestfmt --logfile "${AUTHD_TEST_ARTIFACTS_DIR}/gotestfmt.asan.log" || \
+          exit_code=$?
+          popd
+
+          # We don't need the xtrace output after this point
+          set +x
+
+          # We're logging to a file, and this is useful for having artifacts, but we still may want to see it in logs:
+          for f in "${AUTHD_TEST_ARTIFACTS_DIR}"/*asan.log*; do
+            if ! [ -e "${f}" ]; then
+              continue
+            fi
+            if [ -s "${f}" ]; then
+              echo "::group::${f} ($(wc -l < "${f}") lines)"
+              cat "${f}"
+              echo "::endgroup::"
+            else
+              echo "${f}: empty"
+            fi
+          done
+
+          exit ${exit_code}
+
       - name: Upload coverage to Codecov
+        if: matrix.test == 'coverage'
         uses: codecov/codecov-action@v5
         with:
           directory: ${{ env.COVERAGE_DIR }}
@@ -94,7 +159,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage report as artifact
-        if: github.ref == 'refs/heads/main'
+        if: matrix.test == 'coverage' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: coverage
