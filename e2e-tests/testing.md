@@ -22,7 +22,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt-get install -y {virtualization dependencies}
+    sudo apt install libvirt0 libvirt-clients libvirt-clients-qemu libvirt-daemon libvirt-daemon-system libvirt-daemon-driver-qemu qemu-system-x86 qemu-utils qemu-kvm socat sshpass wget cloud-image-utils
     ```
 
 - Test-run dependencies:
@@ -34,7 +34,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt-get install -y {test-run dependencies}
+    sudo apt install clang libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb ffmpeg gir1.2-webkit2-4.1
     ```
 
 ### 2. Setup the VM
@@ -44,15 +44,14 @@ The tests need a VM to run. This can be easily setup by using the domain definit
 1. Download the latest Ubuntu Desktop image (and resize it):
 
     ```bash
-    wget https://cloud-images.ubuntu.com/minimal/daily/questing/current/questing-minimal-cloudimg-amd64.img -O {img_path}
+    wget https://cloud-images.ubuntu.com/minimal/daily/questing/current/questing-minimal-cloudimg-amd64.img
 
-    qemu-img resize {img_path} 10G
+    qemu-img resize questing-minimal-cloudimg-amd64.img 10G
     ```
 
 2. Create the cloud-init iso using the provided configuration in `e2e-tests/vm/runner-cloud-cfg.yaml`:
-   1. Make sure to update the YAML file and change the `E2E_VM_PASSWORD` placeholder with the desired password.
-   2. Create a directory called `seed/` and copy the YAML file there. The file must be named `user-data`.
-   3. Create the `seed.iso` file using `cloud-localds`.
+   1. Create a directory called `seed/` and copy the YAML file there. The file must be named `user-data`.
+   2. Create the `seed.iso` file using `cloud-localds`.
 
     ```bash
     mkdir -p seed/
@@ -62,7 +61,7 @@ The tests need a VM to run. This can be easily setup by using the domain definit
     cloud-localds seed.iso seed/user-data
     ```
 
-3. Define the VM using the provided XML in `e2e-tests/vm/runner-domain.xml`:
+3. Define the VM using the provided XML in `e2e-tests/vm/e2e-runner.xml`:
    1. Edit the XML and set the correct paths for the disk image. Look for something like:
 
         ```xml

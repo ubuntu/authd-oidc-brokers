@@ -1,5 +1,5 @@
 #cloud-config
-password: E2E_VM_PASSWORD
+password: ubuntu
 ssh_pwauth: true
 users:
   - name: ubuntu
@@ -12,7 +12,7 @@ users:
 chpasswd:
   expire: false
   users:
-    - {name: ubuntu, password: E2E_VM_PASSWORD, type: text}
+    - {name: ubuntu, password: ubuntu, type: text}
 
 package_update: true
 package_upgrade: true
