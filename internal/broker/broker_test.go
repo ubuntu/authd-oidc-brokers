@@ -2,7 +2,6 @@ package broker_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,11 +14,11 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
-	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"gopkg.in/yaml.v3"
 )
@@ -164,40 +163,180 @@ func TestGetAuthenticationModes(t *testing.T) {
 		sessionID        string
 		supportedLayouts []string
 
-		providerAddress       string
-		tokenExists           bool
-		nextAuthMode          string
-		unavailableProvider   bool
-		deviceAuthUnsupported bool
+		providerAddress                    string
+		token                              *tokenOptions
+		noPasswordFile                     bool
+		nextAuthMode                       string
+		unavailableProvider                bool
+		deviceAuthUnsupported              bool
+		registerDevice                     bool
+		providerSupportsDeviceRegistration bool
 
-		wantErr       bool
-		wantFirstMode string
+		wantErr   bool
+		wantModes []string
 	}{
-		// Authentication session
-		"Get_device_auth_qr_if_there_is_no_token":           {wantFirstMode: authmodes.DeviceQr},
-		"Get_password_and_device_auth_qr_if_token_exists":   {tokenExists: true, wantFirstMode: authmodes.Password},
-		"Get_newpassword_if_next_auth_mode_is_newpassword":  {nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
-		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {nextAuthMode: authmodes.DeviceQr, wantFirstMode: authmodes.DeviceQr},
+		// === Authentication session ===
+		"Get_only_device_auth_qr_if_there_is_no_token": {
+			token:     nil,
+			wantModes: []string{authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_token_exists": {
+			token:     &tokenOptions{},
+			wantModes: []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_token_is_invalid": {
+			token:     &tokenOptions{invalid: true},
+			wantModes: []string{authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_there_is_no_password_file": {
+			token:          &tokenOptions{},
+			noPasswordFile: true,
+			wantModes:      []string{authmodes.DeviceQr},
+		},
 
-		"Get_only_password_if_token_exists_and_provider_is_not_available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true, wantFirstMode: authmodes.Password},
-		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true, wantFirstMode: authmodes.Password},
+		// --- Next auth mode ---
+		"Get_only_newpassword_if_next_auth_mode_is_newpassword": {
+			nextAuthMode: authmodes.NewPassword,
+			wantModes:    []string{authmodes.NewPassword},
+		},
+		"Get_only_device_auth_qr_if_next_auth_mode_is_device_qr": {
+			nextAuthMode: authmodes.DeviceQr,
+			wantModes:    []string{authmodes.DeviceQr},
+		},
 
-		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                {sessionMode: sessionmode.ChangePassword, tokenExists: true, wantFirstMode: authmodes.Password},
-		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {sessionMode: sessionmode.ChangePassword, tokenExists: true, nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
-		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":            {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true, wantFirstMode: authmodes.Password},
+		// --- Device registration ---
+		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration_and_provider_does_not_support_it": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: false,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_only_device_auth_qr_if_device_should_not_be_registered_and_token_is_for_device_registration": {
+			registerDevice:                     false,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			wantModes:                          []string{authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_device_should_not_be_registered_and_token_is_not_for_device_registration": {
+			registerDevice:                     false,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		"Get_password_and_device_auth_qr_if_token_is_not_for_device_registration_but_provider_does_not_support_it": {
+			registerDevice:                     false,
+			providerSupportsDeviceRegistration: false,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			wantModes:                          []string{authmodes.Password, authmodes.DeviceQr},
+		},
+		// Note: We don't care about the weird case that the token is for device registration but the provider doesn't
+		//       support it, because that never happens (providers which don't support device registration always return
+		//       false for IsTokenForDeviceRegistration).
 
-		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
+		"Get_only_password_if_device_should_be_registered_and_token_is_not_for_device_registration_but_provider_is_not_available": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			unavailableProvider:                true,
+			// TODO: Automatically set providerAddress if unavailableProvider or deviceAuthUnsupported is set
+			providerAddress: "127.0.0.1:31308",
+			wantModes:       []string{authmodes.Password},
+		},
+		"Get_only_password_if_device_should_not_be_registered_and_token_is_for_device_registration_but_provider_is_not_available": {
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			unavailableProvider:                true,
+			providerAddress:                    "127.0.0.1:31309",
+			wantModes:                          []string{authmodes.Password},
+		},
 
-		// General errors
-		"Error_if_no_authentication_mode_is_supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
-		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
-		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
-		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
-		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
+		"Get_only_password_if_token_exists_and_provider_is_not_available": {
+			token:               &tokenOptions{},
+			providerAddress:     "127.0.0.1:31310",
+			unavailableProvider: true,
+			wantModes:           []string{authmodes.Password},
+		},
+		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {
+			token:                 &tokenOptions{},
+			providerAddress:       "127.0.0.1:31311",
+			deviceAuthUnsupported: true,
+			wantModes:             []string{authmodes.Password},
+		},
+		"Get_only_device_auth_if_token_exists_but_checking_if_it_is_for_device_registration_fails": {
+			token:                              &tokenOptions{noIsForDeviceRegistration: true},
+			providerSupportsDeviceRegistration: true,
+			wantModes:                          []string{authmodes.DeviceQr},
+		},
 
-		// Change password session errors
-		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePassword, wantErr: true},
+		// === Change password session ===
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password": {
+			sessionMode: sessionmode.ChangePassword,
+			token:       &tokenOptions{},
+			wantModes:   []string{authmodes.Password},
+		},
+		"Get_only_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {
+			sessionMode:  sessionmode.ChangePassword,
+			token:        &tokenOptions{},
+			nextAuthMode: authmodes.NewPassword,
+			wantModes:    []string{authmodes.NewPassword},
+		},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value": {
+			sessionMode: sessionmode.ChangePasswordOld,
+			token:       &tokenOptions{},
+			wantModes:   []string{authmodes.Password},
+		},
+
+		// === Errors ===
+		// --- General errors ---
+		"Error_if_there_is_no_session": {
+			sessionID: "-",
+			wantErr:   true,
+		},
+		"Error_if_no_authentication_mode_is_supported": {
+			providerAddress:       "127.0.0.1:31312",
+			deviceAuthUnsupported: true,
+			wantErr:               true,
+		},
+		"Error_if_expecting_device_auth_qr_but_not_supported": {
+			supportedLayouts: []string{"qrcode-without-wait"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_device_auth_but_not_supported": {
+			supportedLayouts: []string{"qrcode-without-wait-and-qrcode"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_newpassword_but_not_supported": {
+			supportedLayouts: []string{"newpassword-without-entry"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_password_but_not_supported": {
+			supportedLayouts: []string{"form-without-entry"},
+			wantErr:          true,
+		},
+		"Error_if_next_auth_mode_is_invalid": {
+			nextAuthMode: "invalid",
+			wantErr:      true,
+		},
+
+		// --- Change password session errors ---
+		"Error_if_session_is_for_changing_password_but_password_file_does_not_exist": {
+			sessionMode:    sessionmode.ChangePassword,
+			noPasswordFile: true,
+			wantErr:        true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -207,7 +346,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 				tc.sessionMode = sessionmode.Login
 			}
 
-			cfg := &brokerForTestConfig{}
+			cfg := &brokerForTestConfig{
+				registerDevice:             tc.registerDevice,
+				supportsDeviceRegistration: tc.providerSupportsDeviceRegistration,
+			}
 			if tc.providerAddress == "" {
 				// Use the default provider URL if no address is provided.
 				cfg.issuerURL = defaultIssuerURL
@@ -232,13 +374,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 			if tc.sessionID == "-" {
 				sessionID = ""
 			}
-			if tc.tokenExists {
-				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
-				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
-				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
-				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+			if tc.token != nil {
+				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
+			}
+			if !tc.noPasswordFile && sessionID != "" {
+				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
@@ -252,18 +393,22 @@ func TestGetAuthenticationModes(t *testing.T) {
 				layouts = append(layouts, supportedUILayouts[layout])
 			}
 
-			got, err := b.GetAuthenticationModes(sessionID, layouts)
+			modes, err := b.GetAuthenticationModes(sessionID, layouts)
 			if tc.wantErr {
 				require.Error(t, err, "GetAuthenticationModes should have returned an error")
 				return
 			}
 			require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
 
-			if tc.wantFirstMode != "" {
-				require.Equal(t, tc.wantFirstMode, got[0]["id"], "First mode should be the expected one")
+			var modeIDs []string
+			for _, mode := range modes {
+				id, exists := mode["id"]
+				require.True(t, exists, "Each mode should have an 'id' field. Mode: %v", mode)
+				modeIDs = append(modeIDs, id)
 			}
+			require.Equal(t, tc.wantModes, modeIDs, "GetAuthenticationModes should have returned the expected modes")
 
-			golden.CheckOrUpdateYAML(t, got)
+			golden.CheckOrUpdateYAML(t, modes)
 		})
 	}
 }
@@ -349,12 +494,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
 			if tc.tokenExists {
-				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
-				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
-				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
-				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
-				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
@@ -391,19 +533,21 @@ func TestIsAuthenticated(t *testing.T) {
 	correctPassword := "password"
 
 	tests := map[string]struct {
-		sessionMode                 string
-		sessionOffline              bool
-		username                    string
-		forceProviderAuthentication bool
-		userDoesNotBecomeOwner      bool
-		allUsersAllowed             bool
-		extraGroups                 []string
-		ownerExtraGroups            []string
+		sessionMode                        string
+		sessionOffline                     bool
+		username                           string
+		forceProviderAuthentication        bool
+		userDoesNotBecomeOwner             bool
+		allUsersAllowed                    bool
+		extraGroups                        []string
+		ownerExtraGroups                   []string
+		providerSupportsDeviceRegistration bool
+		registerDevice                     bool
 
 		firstMode                string
 		firstSecret              string
 		badFirstKey              bool
-		getUserInfoFails         bool
+		getGroupsFails           bool
 		useOldNameForSecretField bool
 		groupsReturnedByProvider []info.Group
 
@@ -454,11 +598,11 @@ func TestIsAuthenticated(t *testing.T) {
 			groupsReturnedByProvider: []info.Group{{Name: "refreshed-group"}},
 			wantGroups:               []info.Group{{Name: "refreshed-group"}},
 		},
-		"Authenticating_with_password_keeps_old_groups_if_fetching_user_info_fails": {
-			firstMode:        authmodes.Password,
-			token:            &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
-			getUserInfoFails: true,
-			wantGroups:       []info.Group{{Name: "old-group"}},
+		"Authenticating_with_password_keeps_old_groups_if_fetching_groups_fails": {
+			firstMode:      authmodes.Password,
+			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
+			getGroupsFails: true,
+			wantGroups:     []info.Group{{Name: "old-group"}},
 		},
 		"Authenticating_with_password_keeps_old_groups_if_session_is_offline": {
 			firstMode:      authmodes.Password,
@@ -471,12 +615,12 @@ func TestIsAuthenticated(t *testing.T) {
 			token:                    &tokenOptions{},
 			useOldNameForSecretField: true,
 		},
-		"Authenticating_to_change_password_still_allowed_if_fetching_user_info_fails": {
+		"Authenticating_to_change_password_still_allowed_if_fetching_groups_fails": {
 			sessionMode:       sessionmode.ChangePassword,
 			firstMode:         authmodes.Password,
 			wantNextAuthModes: []string{authmodes.NewPassword},
 			token:             &tokenOptions{noUserInfo: true},
-			getUserInfoFails:  true,
+			getGroupsFails:    true,
 		},
 		"Authenticating_with_password_when_refresh_token_is_expired_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
@@ -513,6 +657,34 @@ func TestIsAuthenticated(t *testing.T) {
 			ownerExtraGroups:         []string{"owner-group"},
 			wantGroups:               []info.Group{{Name: "remote-group"}},
 		},
+		"Authenticating_with_device_auth_when_provider_supports_device_registration": {
+			firstSecret:                        "-",
+			wantSecondCall:                     true,
+			providerSupportsDeviceRegistration: true,
+			registerDevice:                     true,
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.TokenHandler("http://127.0.0.1:31314", &testutils.TokenHandlerOptions{
+					IDTokenClaims: []map[string]interface{}{
+						{"aud": consts.MicrosoftBrokerAppID},
+					},
+				}),
+			},
+			address: "127.0.0.1:31314",
+		},
+		"Authenticating_with_password_when_provider_supports_device_registration": {
+			firstMode:                          authmodes.Password,
+			token:                              &tokenOptions{},
+			providerSupportsDeviceRegistration: true,
+			registerDevice:                     true,
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.TokenHandler("http://127.0.0.1:31315", &testutils.TokenHandlerOptions{
+					IDTokenClaims: []map[string]interface{}{
+						{"aud": consts.MicrosoftBrokerAppID},
+					},
+				}),
+			},
+			address: "127.0.0.1:31315",
+		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
 		"Error_when_secret_can_not_be_decrypted":            {firstMode: authmodes.Password, badFirstKey: true},
@@ -534,11 +706,6 @@ func TestIsAuthenticated(t *testing.T) {
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
-		},
-		"Error_when_existing_token_has_no_user_info_and_fetching_user_info_fails": {
-			firstMode:        authmodes.Password,
-			token:            &tokenOptions{noUserInfo: true},
-			getUserInfoFails: true,
 		},
 
 		"Error_when_mode_is_qrcode_and_link_expires": {
@@ -583,6 +750,7 @@ func TestIsAuthenticated(t *testing.T) {
 			forceProviderAuthentication: true,
 			sessionOffline:              true,
 		},
+		"Error_when_mode_is_invalid": {firstMode: "invalid"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -606,13 +774,15 @@ func TestIsAuthenticated(t *testing.T) {
 
 			cfg := &brokerForTestConfig{
 				Config:                      broker.Config{DataDir: dataDir},
-				getUserInfoFails:            tc.getUserInfoFails,
+				getGroupsFails:              tc.getGroupsFails,
 				ownerAllowed:                true,
 				firstUserBecomesOwner:       !tc.userDoesNotBecomeOwner,
 				allUsersAllowed:             tc.allUsersAllowed,
 				forceProviderAuthentication: tc.forceProviderAuthentication,
 				extraGroups:                 tc.extraGroups,
 				ownerExtraGroups:            tc.ownerExtraGroups,
+				supportsDeviceRegistration:  tc.providerSupportsDeviceRegistration,
+				registerDevice:              tc.registerDevice,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
@@ -1055,81 +1225,6 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				}
 				t.Fatalf("user %s is not in the allowed or unallowed users list", u)
 			}
-		})
-	}
-}
-
-func TestFetchUserInfo(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		username string
-		token    tokenOptions
-
-		emptyHomeDir bool
-		emptyGroups  bool
-		wantGroupErr bool
-		wantErr      bool
-	}{
-		"Successfully_fetch_user_info_with_groups":                         {},
-		"Successfully_fetch_user_info_without_groups":                      {emptyGroups: true},
-		"Successfully_fetch_user_info_with_default_home_when_not_provided": {emptyHomeDir: true},
-
-		"Error_when_token_can_not_be_validated":                   {token: tokenOptions{invalid: true}, wantErr: true},
-		"Error_when_ID_token_claims_are_invalid":                  {token: tokenOptions{invalidClaims: true}, wantErr: true},
-		"Error_when_username_is_not_configured":                   {token: tokenOptions{username: "-"}, wantErr: true},
-		"Error_when_username_is_different_than_the_requested_one": {token: tokenOptions{username: "other-user@email.com"}, wantErr: true},
-		"Error_when_getting_user_groups":                          {wantGroupErr: true, wantErr: true},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			homeDirPath := "/home/userInfoTests/"
-			if tc.emptyHomeDir {
-				homeDirPath = ""
-			}
-
-			dataDir := t.TempDir()
-
-			cfg := &brokerForTestConfig{
-				Config:      broker.Config{DataDir: dataDir},
-				issuerURL:   defaultIssuerURL,
-				homeBaseDir: homeDirPath,
-			}
-			if tc.emptyGroups {
-				cfg.getGroupsFunc = func() ([]info.Group, error) {
-					return []info.Group{}, nil
-				}
-			}
-			if tc.wantGroupErr {
-				cfg.getGroupsFunc = func() ([]info.Group, error) {
-					return nil, errors.New("error getting groups")
-				}
-			}
-			b := newBrokerForTests(t, cfg)
-
-			if tc.username == "" {
-				tc.username = "test-user@email.com"
-			}
-			tc.token.issuer = defaultIssuerURL
-
-			sessionID, _, err := b.NewSession(tc.username, "lang", sessionmode.Login)
-			require.NoError(t, err, "Setup: Failed to create session for the tests")
-
-			cachedInfo := generateCachedInfo(t, tc.token)
-			if cachedInfo == nil {
-				cachedInfo = &token.AuthCachedInfo{}
-			}
-
-			got, err := b.FetchUserInfo(sessionID, cachedInfo)
-			if tc.wantErr {
-				require.Error(t, err, "FetchUserInfo should have returned an error")
-				return
-			}
-			require.NoError(t, err, "FetchUserInfo should not have returned an error")
-
-			golden.CheckOrUpdateYAML(t, got)
 		})
 	}
 }

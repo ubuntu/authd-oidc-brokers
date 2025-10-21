@@ -14,11 +14,12 @@ import (
 
 // AuthCachedInfo represents the token that will be saved on disk for offline authentication.
 type AuthCachedInfo struct {
-	Token            *oauth2.Token
-	ExtraFields      map[string]interface{}
-	RawIDToken       string
-	ProviderMetadata map[string]interface{}
-	UserInfo         info.User
+	Token                  *oauth2.Token
+	ExtraFields            map[string]interface{}
+	RawIDToken             string
+	ProviderMetadata       map[string]interface{}
+	UserInfo               info.User
+	DeviceRegistrationData []byte
 }
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
@@ -61,7 +62,6 @@ func LoadAuthInfo(path string) (*AuthCachedInfo, error) {
 	if err := json.Unmarshal(jsonData, &cachedInfo); err != nil {
 		return nil, fmt.Errorf("could not unmarshal token: %v", err)
 	}
-
 	// Set the extra fields of the token.
 	if cachedInfo.ExtraFields != nil {
 		cachedInfo.Token = cachedInfo.Token.WithExtra(cachedInfo.ExtraFields)

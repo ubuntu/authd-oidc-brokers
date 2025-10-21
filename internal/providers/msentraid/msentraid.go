@@ -3,15 +3,18 @@ package msentraid
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
@@ -20,6 +23,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )
@@ -36,62 +40,64 @@ const (
 
 // Provider is the Microsoft Entra ID provider implementation.
 type Provider struct {
-	expectedScopes []string
+	expectedScopes              []string
+	needsAccessTokenForGraphAPI bool
+
+	// Used as the token scopes of the access token for the Microsoft Graph API in tests.
+	tokenScopesForGraphAPI []string
 }
 
 // New returns a new MSEntraID provider.
-func New() Provider {
-	return Provider{
+func New() *Provider {
+	return &Provider{
 		expectedScopes: append(consts.DefaultScopes, "GroupMember.Read.All", "User.Read"),
 	}
 }
 
 // AdditionalScopes returns the generic scopes required by the EntraID provider.
-func (p Provider) AdditionalScopes() []string {
+func (p *Provider) AdditionalScopes() []string {
 	return []string{oidc.ScopeOfflineAccess, "GroupMember.Read.All", "User.Read"}
 }
 
 // AuthOptions returns the generic auth options required by the EntraID provider.
-func (p Provider) AuthOptions() []oauth2.AuthCodeOption {
+func (p *Provider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
 }
 
-// CheckTokenScopes checks if the token has the required scopes.
-func (p Provider) CheckTokenScopes(token *oauth2.Token) error {
-	scopes, err := p.getTokenScopes(token)
-	if err != nil {
-		return err
-	}
-
-	var missingScopes []string
-	for _, s := range p.expectedScopes {
-		if !slices.Contains(scopes, s) {
-			missingScopes = append(missingScopes, s)
-		}
-	}
-	if len(missingScopes) > 0 {
-		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
-	}
-	return nil
-}
-
-func (p Provider) getTokenScopes(token *oauth2.Token) ([]string, error) {
-	scopesStr, ok := token.Extra("scope").(string)
+func (p *Provider) getTokenScopes(token *jwt.Token) ([]string, error) {
+	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
+		return nil, fmt.Errorf("failed to cast token claims to MapClaims: %v", token.Claims)
+	}
+	scopesStr, ok := claims["scp"].(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to cast scp claim to string: %v", claims["scp"])
 	}
 	return strings.Split(scopesStr, " "), nil
 }
 
+func (p *Provider) getAppID(token *jwt.Token) (string, error) {
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("failed to cast token claims to MapClaims: %v", token.Claims)
+	}
+	appID, ok := claims["appid"].(string)
+	if !ok {
+		return "", fmt.Errorf("failed to cast appid claim to string: %v", claims["appid"])
+	}
+	return appID, nil
+}
+
 // GetExtraFields returns the extra fields of the token which should be stored persistently.
-func (p Provider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
+func (p *Provider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
 	return map[string]interface{}{
 		"scope": token.Extra("scope"),
+		"scp":   token.Extra("scp"),
 	}
 }
 
 // GetMetadata returns relevant metadata about the provider.
-func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
+func (p *Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
 	var claims struct {
 		MSGraphHost string `json:"msgraph_host"`
 	}
@@ -105,30 +111,11 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 	}, nil
 }
 
-// GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
-// the Microsoft Graph API.
-func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
-	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
-	if providerMetadata["msgraph_host"] != nil {
-		var ok bool
-		msgraphHost, ok = providerMetadata["msgraph_host"].(string)
-		if !ok {
-			return info.User{}, fmt.Errorf("failed to cast msgraph_host to string: %v", providerMetadata["msgraph_host"])
-		}
-
-		// Handle the case that the provider metadata only contains the host without the protocol and API version,
-		// as was the case before 5fc98520c45294ffb85bb27a81929e2ec1b89fcb. This fixes #858.
-		if !strings.Contains(msgraphHost, "://") {
-			msgraphHost = fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion)
-		}
-	}
+// GetUserInfo returns the user info from the ID token.
+func (p *Provider) GetUserInfo(idToken info.Claimer) (info.User, error) {
+	var err error
 
 	userClaims, err := p.userClaims(idToken)
-	if err != nil {
-		return info.User{}, err
-	}
-
-	userGroups, err := p.getGroups(accessToken, msgraphHost)
 	if err != nil {
 		return info.User{}, err
 	}
@@ -139,8 +126,64 @@ func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, id
 		userClaims.Sub,
 		userClaims.Shell,
 		userClaims.Gecos,
-		userGroups,
+		nil,
 	), nil
+}
+
+// GetGroups retrieves the groups the user is a member of via the Microsoft Graph API.
+func (p *Provider) GetGroups(
+	ctx context.Context,
+	clientID string,
+	issuerURL string,
+	token *oauth2.Token,
+	providerMetadata map[string]interface{},
+	deviceRegistrationDataJSON []byte,
+) ([]info.Group, error) {
+	accessTokenStr := token.AccessToken
+	if p.needsAccessTokenForGraphAPI {
+		var data himmelblau.DeviceRegistrationData
+		err := json.Unmarshal(deviceRegistrationDataJSON, &data)
+		if err != nil {
+			log.Noticef(ctx, "Device registration JSON data: %s", deviceRegistrationDataJSON)
+			return nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
+		}
+
+		tenantID := tenantID(issuerURL)
+		accessTokenStr, err = himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
+		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
+			return nil, err
+		}
+		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+			msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
+			return nil, &providerErrors.ForDisplayError{Message: msg, Err: err}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
+		}
+	}
+	// Parse the access token without signature verification, because we're not the audience of the token (that's
+	// the Microsoft Graph API) and we don't use it for authentication, but only to access the Microsoft Graph API.
+	accessToken, _, err := new(jwt.Parser).ParseUnverified(accessTokenStr, jwt.MapClaims{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access token: %w", err)
+	}
+
+	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
+	if providerMetadata["msgraph_host"] != nil {
+		var ok bool
+		msgraphHost, ok = providerMetadata["msgraph_host"].(string)
+		if !ok {
+			return nil, fmt.Errorf("failed to cast msgraph_host to string: %v", providerMetadata["msgraph_host"])
+		}
+
+		// Handle the case that the provider metadata only contains the host without the protocol and API version,
+		// as was the case before 5fc98520c45294ffb85bb27a81929e2ec1b89fcb. This fixes #858.
+		if !strings.Contains(msgraphHost, "://") {
+			msgraphHost = fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion)
+		}
+	}
+
+	return p.fetchUserGroups(accessToken, msgraphHost)
 }
 
 type claims struct {
@@ -152,7 +195,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p Provider) userClaims(idToken info.Claimer) (claims, error) {
+func (p *Provider) userClaims(idToken info.Claimer) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
@@ -160,17 +203,24 @@ func (p Provider) userClaims(idToken info.Claimer) (claims, error) {
 	return userClaims, nil
 }
 
-// getGroups access the Microsoft Graph API to get the groups the user is a member of.
-func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Group, error) {
+// fetchUserGroups access the Microsoft Graph API to get the groups the user is a member of.
+func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info.Group, error) {
 	log.Debug(context.Background(), "Getting user groups from Microsoft Graph API")
 
-	// Check if the token has the GroupMember.Read.All scope
-	scopes, err := p.getTokenScopes(token)
-	if err != nil {
-		return nil, err
+	var err error
+	scopes := p.tokenScopesForGraphAPI
+
+	if scopes == nil {
+		scopes, err = p.getTokenScopes(token)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	// Check if the token has the GroupMember.Read.All scope
 	if !slices.Contains(scopes, "GroupMember.Read.All") {
-		return nil, providerErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
+		msg := "Error: the Microsoft Entra ID app is missing the GroupMember.Read.All permission"
+		return nil, &providerErrors.ForDisplayError{Message: msg}
 	}
 
 	cred := azureTokenCredential{token: token}
@@ -268,12 +318,19 @@ func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.G
 	var securityGroups []msgraphmodels.Groupable
 	for _, group := range groups {
 		if !isSecurityGroup(group) {
-			groupNamePtr := group.GetDisplayName()
-			if groupNamePtr == nil {
-				log.Debugf(context.Background(), "Removing unnamed non-security group")
-				continue
+			var s string
+			if groupNamePtr := group.GetDisplayName(); groupNamePtr != nil {
+				s = *groupNamePtr
+			} else if description := group.GetDescription(); description != nil {
+				s = *description
+			} else if uniqueName := group.GetUniqueName(); uniqueName != nil {
+				s = *uniqueName
 			}
-			log.Debugf(context.Background(), "Removing non-security group %s", *groupNamePtr)
+			if s == "" {
+				log.Debugf(context.Background(), "Removing unnamed non-security group")
+			} else {
+				log.Debugf(context.Background(), "Removing non-security group %s", s)
+			}
 			continue
 		}
 		securityGroups = append(securityGroups, group)
@@ -335,7 +392,7 @@ func isSecurityGroup(group msgraphmodels.Groupable) bool {
 }
 
 // NormalizeUsername parses a username into a normalized version.
-func (p Provider) NormalizeUsername(username string) string {
+func (p *Provider) NormalizeUsername(username string) string {
 	// Microsoft Entra usernames are case-insensitive. We can safely use strings.ToLower here without worrying about
 	// different Unicode characters that fold to the same lowercase letter, because the Microsoft Entra username policy
 	// (which we check in VerifyUsername) ensures that the username only contains ASCII characters.
@@ -343,14 +400,15 @@ func (p Provider) NormalizeUsername(username string) string {
 }
 
 // SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
-func (p Provider) SupportedOIDCAuthModes() []string {
+func (p *Provider) SupportedOIDCAuthModes() []string {
 	return []string{authmodes.Device, authmodes.DeviceQr}
 }
 
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
-func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
+func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
-		return providerErrors.NewForDisplayError("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
+		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated username %q", requestedUsername, authenticatedUsername)
+		return &providerErrors.ForDisplayError{Message: msg}
 	}
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
@@ -359,28 +417,119 @@ func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string
 	if !usernameRegexp.MatchString(authenticatedUsername) {
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
-		return providerErrors.NewForDisplayError("the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
+		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
+		return &providerErrors.ForDisplayError{Message: msg}
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {
-		return providerErrors.NewForDisplayError("requested username %q contains invalid characters", requestedUsername)
+		msg := fmt.Sprintf("Authentication failure: requested username %q contains invalid characters", requestedUsername)
+		return &providerErrors.ForDisplayError{Message: msg}
 	}
 
 	return nil
 }
 
+// SupportsDeviceRegistration checks if the provider supports device registration.
+func (p *Provider) SupportsDeviceRegistration() bool {
+	// The Microsoft Entra ID provider supports device registration.
+	return true
+}
+
+// IsTokenForDeviceRegistration checks if the token is for device registration.
+func (p *Provider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
+	accessToken, _, err := new(jwt.Parser).ParseUnverified(token.AccessToken, jwt.MapClaims{})
+	if err != nil {
+		return false, fmt.Errorf("failed to parse access token: %v", err)
+	}
+
+	appID, err := p.getAppID(accessToken)
+	if err != nil {
+		return false, fmt.Errorf("failed to get app ID from access token: %v", err)
+	}
+
+	return appID == consts.MicrosoftBrokerAppID, nil
+}
+
+// MaybeRegisterDevice checks if the device is already registered and registers it if not.
+func (p *Provider) MaybeRegisterDevice(
+	ctx context.Context,
+	token *oauth2.Token,
+	username string,
+	issuerURL string,
+	jsonData []byte,
+) (registrationData []byte, cleanup func(), err error) {
+	// If this function is called, it means that the token that we have is for device registration,
+	// so we can't use it to access the Microsoft Graph API.
+	p.needsAccessTokenForGraphAPI = true
+
+	nop := func() {}
+
+	// Check if the device is already registered
+	if len(jsonData) > 0 {
+		var data himmelblau.DeviceRegistrationData
+		if err := json.Unmarshal(jsonData, &data); err != nil {
+			log.Noticef(ctx, "Device registration JSON data: %s", string(jsonData))
+			return nil, nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
+		}
+		if data.IsValid() {
+			return jsonData, nop, nil
+		}
+	}
+
+	nameParts := strings.Split(username, "@")
+	if len(nameParts) != 2 {
+		return nil, nop, fmt.Errorf("invalid username format: %s, expected format is 'username@domain'", username)
+	}
+	domain := nameParts[1]
+
+	data, cleanup, err := himmelblau.RegisterDevice(ctx, token, tenantID(issuerURL), domain)
+	if err != nil {
+		return nil, nop, err
+	}
+
+	// Ensure that the cleanup function is called if we return an error.
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
+
+	jsonData, err = json.Marshal(data)
+	if err != nil {
+		return nil, nop, fmt.Errorf("failed to marshal device registration data: %v", err)
+	}
+
+	return jsonData, cleanup, nil
+}
+
+// tenantID extracts the tenant ID from a Microsoft Entra ID issuer URL.
+// For example, given: https://login.microsoftonline.com/8de88d99-6d0f-44d7-a8a5-925b012e5940/v2.0
+// it returns: 8de88d99-6d0f-44d7-a8a5-925b012e5940.
+func tenantID(issuerURL string) string {
+	return strings.Split(strings.TrimPrefix(issuerURL, "https://login.microsoftonline.com/"), "/")[0]
+}
+
 type azureTokenCredential struct {
-	token *oauth2.Token
+	token *jwt.Token
 }
 
 // GetToken creates an azcore.AccessToken from an oauth2.Token.
 func (c azureTokenCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	claims, ok := c.token.Claims.(jwt.MapClaims)
+	if !ok {
+		return azcore.AccessToken{}, fmt.Errorf("failed to cast token claims to MapClaims: %v", c.token.Claims)
+	}
+	expiresOn, ok := claims["exp"].(float64)
+	if !ok {
+		return azcore.AccessToken{}, fmt.Errorf("failed to cast token expiration to float64: %v", claims["exp"])
+	}
+
 	return azcore.AccessToken{
-		Token:     c.token.AccessToken,
-		ExpiresOn: c.token.Expiry,
+		Token:     c.token.Raw,
+		ExpiresOn: time.Unix(int64(expiresOn), 0),
 	}, nil
 }
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (p Provider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
+func (p *Provider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
 	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }
