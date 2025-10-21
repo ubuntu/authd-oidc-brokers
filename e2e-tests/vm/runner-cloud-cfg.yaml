@@ -60,6 +60,8 @@ runcmd:
   - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
   # Update dconf database
   - dconf update
+  # Disable systemd-networkd-wait-online to speed up boot time
+  - sudo systemctl mask systemd-networkd-wait-online.service
 
 final_message: "Provisioning finished after $UPTIME seconds"
 
