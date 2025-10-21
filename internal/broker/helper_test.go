@@ -204,6 +204,8 @@ type tokenOptions struct {
 	noUserInfo                bool
 	isForDeviceRegistration   bool
 	noIsForDeviceRegistration bool
+	deviceIsDisabled          bool
+	userIsDisabled            bool
 }
 
 func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
@@ -239,6 +241,8 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 			RefreshToken: "refreshtoken",
 			Expiry:       time.Now().Add(1000 * time.Hour),
 		},
+		DeviceIsDisabled: options.deviceIsDisabled,
+		UserIsDisabled:   options.userIsDisabled,
 	}
 
 	if options.expired {

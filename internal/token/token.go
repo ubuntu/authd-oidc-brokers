@@ -20,6 +20,8 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
+	DeviceIsDisabled       bool
+	UserIsDisabled         bool
 }
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
