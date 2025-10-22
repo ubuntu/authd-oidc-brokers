@@ -6,8 +6,8 @@ on:
   schedule:
     - cron: '0 0 * * *'  # Runs every day at midnight
   pull_request:
-    branches:
-      - main
+    # branches:
+    #   - main
 
 name: MSEntraID E2E tests
 jobs:
