@@ -19,8 +19,8 @@ set -eu
 # This script is used to run the YARF tests for the authd-oidc-brokers project.
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
-AUTHD_COMMON_DIR="${ROOT_DIR}/common"
-BROKER_COMMON_DIR="${ROOT_DIR}/$BROKER/common"
+AUTHD_RESOURCE_DIR="${ROOT_DIR}/resources/authd"
+BROKER_RESOURCE_DIR="${ROOT_DIR}/resources/$BROKER"
 
 # Create directory for the test run
 TEST_RUN_DIR="/tmp/e2e-testrun-${BROKER}"
@@ -28,10 +28,10 @@ mkdir -p "${TEST_RUN_DIR}"
 cd "${TEST_RUN_DIR}"
 
 # Link the necessary directories into the test run directory if they don't already exist
-[ -d authd-common ] || [ -L authd-common ] && rm -rf authd-common
-[ -d broker-common ] || [ -L broker-common ] && rm -rf broker-common
-ln -s "${AUTHD_COMMON_DIR}" authd-common
-ln -s "${BROKER_COMMON_DIR}" broker-common
+[ -d authd-resources ] || [ -L authd-resources ] && rm -rf authd-resources
+[ -d broker-resources ] || [ -L broker-resources ] && rm -rf broker-resources
+ln -s "${AUTHD_RESOURCE_DIR}" authd-resources
+ln -s "${BROKER_RESOURCE_DIR}" broker-resources
 mkdir -p output
 
 # Read entire tests dir if arguments are not provided

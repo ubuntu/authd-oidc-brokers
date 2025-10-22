@@ -2,13 +2,13 @@
 Documentation       MS Entra ID specific resources for the tests
 
 Resource            kvm.resource
-Resource            ${AUTHD_COMMON}/utils.resource
+Resource            ${AUTHD_RESOURCES}/utils.resource
 
 Library            Process
 
 *** Variables ***
-${AUTHD_COMMON}    ${CURDIR}/../authd-common
-${ENTRAID_COMMON}    ${CURDIR}/../broker-common
+${AUTHD_RESOURCES}    ${CURDIR}/../authd-resources
+${ENTRAID_RESOURCES}    ${CURDIR}/../broker-resources
 
 ${AUTHD_BROKER_CFG}    /etc/authd/brokers.d/msentraid.conf
 ${ENTRAID_BROKER_CFG}    /var/snap/authd-msentraid/current/broker.conf
@@ -74,7 +74,7 @@ Continue Log In With Remote User: Log In On External Browser
     ${text} =    Read Text
     ${user_code} =    StringUtils.FirstMatch    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
 
-    Start Process    ${ENTRAID_COMMON}/device_login.py    ${username}    %{E2E_PASSWORD}    ${user_code}    alias=RemoteAuth
+    Start Process    ${ENTRAID_RESOURCES}/device_login.py    ${username}    %{E2E_PASSWORD}    ${user_code}    alias=RemoteAuth
     Wait For Process    RemoteAuth
     Builtin.Sleep    5
 
