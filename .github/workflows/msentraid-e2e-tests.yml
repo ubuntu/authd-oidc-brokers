@@ -1,0 +1,210 @@
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Runs every day at midnight
+  pull_request:
+    branches:
+      - main
+
+name: MSEntraID E2E tests
+jobs:
+    use-vm:
+        name: MSEntraID E2E tests
+        runs-on: ubuntu-latest
+        env:
+          DEBIAN_FRONTEND: noninteractive
+
+          virt_apt_dependencies: >-
+            libvirt0
+            libvirt-clients
+            libvirt-clients-qemu
+            libvirt-daemon
+            libvirt-daemon-system
+            libvirt-daemon-driver-qemu
+            qemu-system-x86
+            qemu-utils
+            qemu-kvm
+            socat
+            sshpass
+
+          yarf_apt_dependencies: >-
+            clang
+            libxkbcommon-dev
+            libcairo2-dev
+            libgirepository-2.0-dev
+            tesseract-ocr
+            python3-tk
+            python3-gi
+            python3-cairo
+            xvfb
+            ffmpeg
+            gir1.2-webkit2-4.1
+
+          ssh_command: >-
+            sshpass -p ubuntu ssh -o StrictHostKeyChecking=no -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" ubuntu@localhost
+
+        steps:
+        - name: Restore cached VM image
+          uses: actions/cache/restore@v4
+          with:
+            path: /tmp/vm/e2e-runner.img
+            key: e2e-runner-vm
+            fail-on-cache-miss: true
+
+        - name: Checkout authd-oidc-brokers repo
+          uses: actions/checkout@v5
+          with:
+            path: authd-oidc-brokers
+
+        - name: Checkout YARF repo
+          uses: actions/checkout@v5
+          with:
+            repository: canonical/yarf
+            ref: 99a33b69fefa6d2ca9e59500b9f35dcda65031eb
+            path: yarf
+
+        - name: Configure YARF
+          run: |
+            set -eu
+
+            sudo snap install --classic astral-uv
+
+            sudo apt-get install -y ${{ env.yarf_apt_dependencies }}
+
+            pushd yarf
+            uv sync
+            uv pip install .[develop]
+            source .venv/bin/activate
+            uv pip install pygobject
+            popd
+
+        - name: Install dependencies
+          run: |
+            set -eu
+
+            sudo apt-get update
+            sudo apt-get install -y ${{ env.virt_apt_dependencies }}
+
+        - name: Start VM
+          run: |
+            set -eux
+
+            cp authd-oidc-brokers/e2e-tests/vm/e2e-runner.xml /tmp/vm/e2e-runner.xml
+
+            # Define and start the domain
+            sudo virsh define /tmp/vm/e2e-runner.xml
+            sudo virsh start e2e-runner
+
+            # Wait for the VM to boot and for apt to be ready
+            set +e
+            for i in $(seq 1 30); do
+              ssh_up=$(${{ env.ssh_command }} "sudo apt-get update")
+              if [[ ! -z "$ssh_up" ]]; then
+                break
+              fi
+              echo "Waiting for VM..."
+              sleep 10
+            done
+
+            # Set up fresh snapshot after boot
+            sudo virsh snapshot-create-as e2e-runner --name fresh-install --reuse-external
+
+        - name: Set up authd - edge && stable
+          run: |
+            set -eux
+
+            declare -a versions=("edge" "stable")
+            for version in "${versions[@]}"; do
+              echo "Setting up authd - $version"
+
+              sudo virsh snapshot-revert e2e-runner fresh-install
+
+              PPA="ppa:ubuntu-enterprise-desktop/authd-edge"
+              if [[ "$version" == "stable" ]]; then
+                PPA="ppa:ubuntu-enterprise-desktop/authd"
+              fi
+
+              ${{ env.ssh_command }} "sudo DEBIAN_FRONTEND=noninteractive add-apt-repository -y $PPA"
+              ${{ env.ssh_command }} "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y authd"
+
+              # Create snapshot to be used as base for broker configuration
+              sudo virsh snapshot-create-as e2e-runner --name "authd-$version-installed" --reuse-external
+            done
+
+            # We can remove the fresh-install snapshot now to save some space in the runner (we are going to need it)
+            sudo virsh snapshot-delete e2e-runner fresh-install
+
+        - name: Set up msentraid broker - edge && stable
+          run: |
+            set -eux
+
+            declare -a versions=("edge" "stable")
+            for version in "${versions[@]}"; do
+              echo "Setting up msentraid broker - $version"
+
+              sudo virsh snapshot-revert e2e-runner "authd-$version-installed"
+
+              ${{ env.ssh_command }} "sudo snap install authd-msentraid --channel=$version"
+
+              # Configure authd
+              ${{ env.ssh_command }} "sudo mkdir -p /etc/authd/brokers.d"
+              ${{ env.ssh_command }} "sudo cp /snap/authd-msentraid/current/conf/authd/msentraid.conf /etc/authd/brokers.d/"
+
+              # Configure the broker
+              ${{ env.ssh_command }} "sudo printf \"\
+              [oidc]\n\
+              issuer = ${{ secrets.E2E_MSENTRA_TENANT }}\n\
+              client_id = ${{ secrets.E2E_MSENTRA_CLIENT_ID }}\n\
+              force_provider_authentication = false\n\
+              [users]\n\
+              ssh_allowed_suffixes = ${{ secrets.E2E_MSENTRA_USERNAME }}\n\
+              allowed_users = OWNER\n\
+              owner = ${{ secrets.E2E_MSENTRA_USERNAME }}\n\" | sudo tee /tmp/msentraid.conf"
+
+              # Fix file permissions and ownership
+              ${{ env.ssh_command }} "sudo install -o root -g root -m 600 /tmp/msentraid.conf /var/snap/authd-msentraid/current/broker.conf"
+
+              # Restart authd and broker to apply the changes
+              ${{ env.ssh_command }} "sudo systemctl restart authd.service"
+
+              # Retry restarting the broker snap a few times, as it may fail if the restart happens too quickly
+              for i in {1..10}; do
+                ${{ env.ssh_command }} "sudo snap restart authd-msentraid" || exit_code=$? && true
+                if [[ "$exit_code" == 0 || "$exit_code" == 255 ]]; then
+                  echo "Broker service was restarted successfully"
+                  break
+                fi
+                echo "Restart failed, retrying in a few seconds..."
+                sleep 6s
+              done
+
+              # Reboot the VM to ensure a clean snapshot
+              sudo virsh reboot e2e-runner
+
+              sleep 180s
+
+              # Create snapshot for broker configured state
+              sudo virsh snapshot-create-as e2e-runner --name "authd-msentraid-$version-configured" --reuse-external
+
+              # Remove the authd installed snapshot, we won't need it anymore
+              sudo virsh snapshot-delete e2e-runner "authd-$version-installed"
+            done
+
+        - name: Run tests
+          run: |
+            set +eux
+
+            source yarf/.venv/bin/activate
+
+            sudo -E env PATH="$PATH" \
+            BROKER=authd-msentraid \
+            E2E_USER=${{ secrets.E2E_MSENTRA_USERNAME }} \
+            E2E_PASSWORD=${{ secrets.E2E_MSENTRA_PASSWORD}} \
+            ./authd-oidc-brokers/e2e-tests/run_tests.sh
+
+        - name: Upload test results
+          if: always()
+          uses: actions/upload-artifact@v4
+          with:
+            name: e2e-testrun-msentraid-output
+            path: /tmp/e2e-testrun-msentraid/output
