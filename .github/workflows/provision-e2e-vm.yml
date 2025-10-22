@@ -9,9 +9,9 @@ on:
       - '.github/workflows/provision-e2e-vm.yml'
       - 'e2e-tests/vm/provision-ubuntu.sh'
   pull_request:
-    paths:
-      - '.github/workflows/provision-e2e-vm.yml'
-      - 'e2e-tests/vm/provision-ubuntu.sh'
+    # paths:
+    #   - '.github/workflows/provision-e2e-vm.yml'
+    #   - 'e2e-tests/vm/provision-ubuntu.sh'
 
 env:
   DEBIAN_FRONTEND: noninteractive
