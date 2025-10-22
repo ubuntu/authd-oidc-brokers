@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * 1'  # Runs every Monday at midnight
+  pull_request:
 
 env:
   DEBIAN_FRONTEND: noninteractive
