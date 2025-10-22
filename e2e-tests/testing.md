@@ -16,7 +16,19 @@ The tests have mainly two sets of dependencies: one required to configure and ru
 - Virtualization dependencies:
 
     ```text
-    libvirt0 libvirt-clients libvirt-clients-qemu libvirt-daemon libvirt-daemon-system libvirt-daemon-driver-qemu qemu-system-x86 qemu-utils qemu-kvm socat sshpass wget cloud-image-utils
+    libvirt0
+    libvirt-clients
+    libvirt-clients-qemu
+    libvirt-daemon
+    libvirt-daemon-system
+    libvirt-daemon-driver-qemu
+    qemu-system-x86
+    qemu-utils
+    qemu-kvm
+    socat
+    sshpass
+    wget
+    cloud-image-utils
     ```
 
     Those are all part of the archive and can be installed on Ubuntu with:
@@ -28,7 +40,16 @@ The tests have mainly two sets of dependencies: one required to configure and ru
 - Test-run dependencies:
 
     ```text
-    clang libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb ffmpeg gir1.2-webkit2-4.1
+    clang
+    libxkbcommon-dev
+    libcairo2-dev
+    libgirepository-2.0-dev
+    python3-tk
+    python3-gi
+    python3-cairo
+    xvfb
+    ffmpeg
+    gir1.2-webkit2-4.1
     ```
 
     Those are all part of the archive and can be installed on Ubuntu with:
@@ -118,15 +139,15 @@ Now that the VM is ready, we need to install authd and the brokers we want to te
 - To avoid having to interactively type the password every time, we will use `sshpass` to provide it non-interactively.
 - The VM uses `socat` to forward the SSH port over VSOCK, so the SSH command will look like this:
 
- ```bash
- sshpass -p <vm_password> ssh -o StrictHostKeyChecking=no -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" ubuntu@localhost
- ```
+    ```bash
+    sshpass -p <vm_password> ssh -o StrictHostKeyChecking=no -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" ubuntu@localhost
+    ```
 
 - From now on, the command will be referred to as `ssh_vm` for simplicity. You can create an alias for it:
 
- ```bash
- alias ssh_vm='sshpass -p <vm_password> ssh -o StrictHostKeyChecking=no -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" ubuntu@localhost'
- ```
+    ```bash
+    alias ssh_vm='sshpass -p <vm_password> ssh -o StrictHostKeyChecking=no -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" ubuntu@localhost'
+    ```
 
 - Now we can proceed to install authd and the brokers. The following steps need to be repeated for each version of authd we want to test (stable and edge).
 
@@ -160,22 +181,22 @@ Repeat the following steps for each version of each broker you want to test;
 
 1. Revert to the desired authd snapshot (either stable or edge) to ensure a clean state:
 
-```bash
-virsh snapshot-revert e2e-runner "authd-<version>-installed"
-```
+    ```bash
+    virsh snapshot-revert e2e-runner "authd-<version>-installed"
+    ```
 
 2. Install the desired broker (replace `<broker>` and `<channel>` with the desired values):
 
-```bash
-ssh_vm "sudo snap install <broker> --channel=<channel>"
-```
+    ```bash
+    ssh_vm "sudo snap install <broker> --channel=<channel>"
+    ```
 
 3. Configure authd to recognize the installed broker.
 
-```bash
-ssh_vm "sudo mkdir -p /etc/authd/brokers.d"
-ssh_vm "sudo cp /snap/<broker>/current/conf/authd/<broker>.conf /etc/authd/brokers.d/"
-```
+    ```bash
+    ssh_vm "sudo mkdir -p /etc/authd/brokers.d"
+    ssh_vm "sudo cp /snap/<broker>/current/conf/authd/<broker>.conf /etc/authd/brokers.d/"
+    ```
 
 4. Configure the installed broker:
    1. Write the configuration file for the broker
@@ -211,18 +232,18 @@ ssh_vm "sudo cp /snap/<broker>/current/conf/authd/<broker>.conf /etc/authd/broke
 
 5. Reboot the VM to ensure the snapshot is taken from the login screen.
 
-```bash
-virsh reboot e2e-runner
+    ```bash
+    virsh reboot e2e-runner
 
-# Wait a while for the VM to reboot
-sleep 120s
-```
+    # Wait a while for the VM to reboot
+    sleep 120s
+    ```
 
 6. Create a snapshot of this state, so we can revert to it later when running the tests.
 
-```bash
-virsh snapshot-create-as e2e-runner --name "<broker>-<channel>-configured" --reuse-external
-```
+    ```bash
+    virsh snapshot-create-as e2e-runner --name "<broker>-<channel>-configured" --reuse-external
+    ```
 
 #### Scripts to automate the installation and configuration of authd and brokers
 
