@@ -2,11 +2,11 @@
 Documentation       Authd related test resources
 
 Resource            kvm.resource
-Resource            ${AUTHD_COMMON}/utils.resource
+Resource            ${AUTHD_RESOURCES}/utils.resource
 
 
 *** Variables ***
-${AUTHD_COMMON}    ${CURDIR}/../authd-common
+${AUTHD_RESOURCES}    ${CURDIR}/../authd-resources
 ${local_password}    qwer1234
 
 

@@ -1,15 +1,15 @@
 *** Settings ***
-Resource        ${AUTHD_COMMON_DIR}/utils.resource
-Resource        ${AUTHD_COMMON_DIR}/authd.resource
+Resource        ${AUTHD_RESOURCES_DIR}/utils.resource
+Resource        ${AUTHD_RESOURCES_DIR}/authd.resource
 
-Resource        ${BROKER_COMMON_DIR}/broker.resource
+Resource        ${BROKER_RESOURCES_DIR}/broker.resource
 
 Test Tags       robot:exit-on-failure
 
 
 *** Variables ***
-${AUTHD_COMMON_DIR}        ${CURDIR}/authd-common
-${BROKER_COMMON_DIR}      ${CURDIR}/broker-common
+${AUTHD_RESOURCES_DIR}        ${CURDIR}/authd-resources
+${BROKER_RESOURCES_DIR}      ${CURDIR}/broker-resources
 
 ${username}    %{E2E_USER}
 

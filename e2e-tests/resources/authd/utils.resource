@@ -6,10 +6,6 @@ Library             ${CURDIR}/StringUtils.py    AS    StringUtils
 Library             Process
 
 
-*** Variables ***
-${SCRIPTS_DIR}    ${CURDIR}/scripts
-
-
 *** Keywords ***
 Log In
     Match Text    Not listed    300
