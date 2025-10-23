@@ -98,7 +98,7 @@ if [ -z "${TESTS_TO_RUN}" ]; then
 fi
 
 # Create a temporary test run directory
-TEST_RUNS_DIR="${ROOT_DIR}/.runs"
+TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 mkdir -p "${TEST_RUNS_DIR}"
 TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 cd "${TEST_RUN_DIR}"
