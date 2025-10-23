@@ -3,6 +3,7 @@ Documentation       authd test resources
 
 Resource            kvm.resource
 Library             ./StringUtils.py    AS    StringUtils
+Library             ./Command.py    AS    Command
 Library             Process
 
 
