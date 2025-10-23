@@ -10,7 +10,7 @@ YARF_DIR="${SCRIPT_DIR}/.yarf"
 # Clone the YARF repository if it doesn't exist
 if [ ! -d "$YARF_DIR" ]; then
     echo "Cloning YARF repository into $YARF_DIR..."
-    git clone "$YARF_REPO_URL" "$YARF_DIR"
+    git clone --depth=1 "$YARF_REPO_URL" "$YARF_DIR"
 else
     echo "YARF repository already exists at $YARF_DIR, pulling latest changes..."
     cd "$YARF_DIR"
