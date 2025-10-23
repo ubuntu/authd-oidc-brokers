@@ -26,6 +26,14 @@ jobs:
           golangci-lint-configfile: ".golangci.yaml"
           tools-directory: "tools"
 
+  shell-sanity:
+    name: "Shell: Code sanity"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+
   go-tests:
     name: "Go: Tests"
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
