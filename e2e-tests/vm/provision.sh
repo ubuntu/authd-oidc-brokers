@@ -4,13 +4,14 @@ set -euo pipefail
 
 usage(){
     cat << EOF
-Usage: $0 --ssh-public-key <file> --issuer-id <id> --client-id <id>
-       $0 -k <file> -i <id> -c <id>
+Usage: $0 --ssh-public-key <file> --issuer-id <id> --client-id <id> --user <name>
+       $0 -k <file> -i <id> -c <id> -u <name>
 
 Options:
   -k, --ssh-public-key <file>   Path to the SSH public key file to be added to the VM
   -i, --issuer-id <id>          OIDC Issuer ID for broker configuration
   -c, --client-id <id>          OIDC Client ID for broker configuration
+  -u, --user <name>             Username used for authd login in the tests
   -h, --help                    Show this help message and exit
 
 Provisions the VM for end-to-end tests
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             CLIENT_ID="$2"
             shift 2
             ;;
+        -u|--user)
+            AUTHD_USER="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -63,7 +68,8 @@ done
 
 if [ -z "${SSH_PUBLIC_KEY_FILE:-}" ] || \
    [ -z "${ISSUER_ID:-}" ] || \
-   [ -z "${CLIENT_ID:-}" ]; then
+   [ -z "${CLIENT_ID:-}" ] || \
+   [ -z "${AUTHD_USER:-}" ]; then
    echo "Missing required arguments." >&2
    usage
    exit 1
@@ -111,6 +117,7 @@ function install_brokers() {
               sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/ && \
               sudo sed -i -e 's|<ISSUER_ID>|'${ISSUER_ID}'|g' \
                           -e 's|<CLIENT_ID>|'${CLIENT_ID}'|g' \
+                          -e 's|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = '${AUTHD_USER}|g' \
                           /var/snap/${broker}/current/broker.conf && \
               sudo systemctl restart authd.service && \
               sudo snap restart ${broker}"
