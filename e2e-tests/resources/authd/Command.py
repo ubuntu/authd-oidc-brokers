@@ -9,5 +9,8 @@ class Command:
         result = Process().run_process(command, *arguments)
         if result.rc != 0:
             cmd = command if not arguments else f"{command} {' '.join(arguments)}"
-            LOGGER.error(f"Command '{cmd}' failed: {result.stderr}")
-            raise RuntimeError(f"Command '{command}' failed")
+            message = (f"Command '{cmd}' failed:\n"
+                       f"--- stdout ---\n{result.stdout}\n"
+                       f"--- stderr ---\n{result.stderr}")
+            LOGGER.error(message)
+            raise RuntimeError(f"Command '{cmd}' failed")
