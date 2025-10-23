@@ -48,7 +48,7 @@
             <clipboard copypaste='yes'/>
             <mouse mode='client'/>
         </graphics>
-        <graphics type="vnc" port="5900" autoport="no">
+        <graphics type="vnc" autoport="yes">
             <listen type="address" />
             <clipboard copypaste='yes'/>
             <mouse mode='client'/>
