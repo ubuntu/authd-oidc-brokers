@@ -112,15 +112,18 @@ function install_brokers() {
         local broker_config="${broker#authd-}.conf"
 
         # Install broker, configure and restart services
-        $SSH "sudo snap install ${broker} --channel=${channel} && \
-              sudo mkdir -p /etc/authd/brokers.d && \
-              sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/ && \
-              sudo sed -i -e 's|<ISSUER_ID>|'${ISSUER_ID}'|g' \
-                          -e 's|<CLIENT_ID>|'${CLIENT_ID}'|g' \
-                          -e 's|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = '${AUTHD_USER}|g' \
-                          /var/snap/${broker}/current/broker.conf && \
-              sudo systemctl restart authd.service && \
-              sudo snap restart ${broker}"
+        $SSH bash -euo pipefail -s <<-EOF
+			sudo snap install "${broker}" --channel="${channel}"
+			sudo mkdir -p /etc/authd/brokers.d
+			sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
+			sudo sed -i \
+		  		-e "s|<ISSUER_ID>|${ISSUER_ID}|g" \
+		  		-e "s|<CLIENT_ID>|${CLIENT_ID}|g" \
+		  		-e "s|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = ${AUTHD_USER}|g" \
+		  		/var/snap/${broker}/current/broker.conf
+			sudo systemctl restart authd.service
+			sudo snap restart "${broker}"
+		EOF
 
         # Reboot VM and wait until it's back
         virsh reboot "${VM_NAME}"
