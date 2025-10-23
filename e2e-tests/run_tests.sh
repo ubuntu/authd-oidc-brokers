@@ -34,6 +34,7 @@ if [ -n "${1:-}" ]; then
 fi
 
 # Run the YARF tests
+tests_failed=
 test_results=()
 for test_file in $TESTS_TO_RUN; do
     test_name=$(basename "${test_file}")
@@ -63,6 +64,7 @@ for test_file in $TESTS_TO_RUN; do
     fi
 
     if [ ${test_result} -ne 0 ]; then
+        tests_failed=1
         test_results+=("${test_name}: FAILED")
     else
         test_results+=("${test_name}: OK")
@@ -73,3 +75,7 @@ done
 for result in "${test_results[@]}"; do
     echo "${result}"
 done
+
+if [ -n "${tests_failed}" ]; then
+    exit 1
+fi
