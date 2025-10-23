@@ -22,8 +22,9 @@ TESTS_DIR="${ROOT_DIR}/tests"
 VM_NAME=${VM_NAME:-"e2e-runner"}
 
 # Create directory for the test run
-TEST_RUN_DIR="/tmp/e2e-testrun-${BROKER}"
-mkdir -p "${TEST_RUN_DIR}"
+TEST_RUNS_DIR="${ROOT_DIR}/.runs"
+mkdir -p "${TEST_RUNS_DIR}"
+TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 cd "${TEST_RUN_DIR}"
 mkdir -p output resources
 
