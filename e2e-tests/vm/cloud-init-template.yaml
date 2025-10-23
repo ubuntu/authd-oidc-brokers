@@ -9,6 +9,8 @@ users:
     groups: sudo
     homedir: /home/ubuntu
     shell: /bin/bash
+    ssh_authorized_keys:
+      - ${SSH_PUBLIC_KEY}
 chpasswd:
   expire: false
   users:
