@@ -1,0 +1,102 @@
+name: Build and Cache Ubuntu VM
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'  # Runs every Monday at midnight
+  pull_request:
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  apt_dependencies: >-
+    libvirt0
+    libvirt-clients
+    libvirt-clients-qemu
+    libvirt-daemon
+    libvirt-daemon-system
+    libvirt-daemon-driver-qemu
+    qemu-system-x86
+    qemu-utils
+    qemu-kvm
+    wget
+    cloud-image-utils
+
+jobs:
+  build-vm:
+    name: Provision and cache Ubuntu VM for the E2E tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -eu
+
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.apt_dependencies }}
+
+      - name: Download Ubuntu cloud image
+        run: |
+          set -eu
+
+          mkdir -p /tmp/vm
+          wget -q https://cloud-images.ubuntu.com/questing/current/questing-server-cloudimg-amd64.img -O /tmp/vm/e2e-runner.img
+
+          # Copy the XML definition
+          cp e2e-tests/vm/e2e-runner.xml /tmp/vm/e2e-runner.xml
+
+      - name: Provision VM
+        id: provision-vm
+        run: |
+          set -eu
+
+          mkdir -p /tmp/vm/seed
+
+          cp e2e-tests/vm/runner-cloud-cfg.yaml /tmp/vm/seed/user-data
+
+          # Create cloud-init ISO
+          cloud-localds /tmp/vm/seed.iso /tmp/vm/seed/user-data
+
+          # Resize the image to 10G
+          qemu-img resize /tmp/vm/e2e-runner.img 10G
+
+          # Create the domain using the XML definition
+          sudo virsh define /tmp/vm/e2e-runner.xml
+
+          # Attach the cloud-init ISO
+          sudo virsh attach-disk --domain e2e-runner --source /tmp/vm/seed.iso --target sda --type cdrom --config
+
+          # Start the VM
+          sudo virsh start e2e-runner
+
+          sleep 300s
+
+          for i in {1..20}; do
+            domain_state=$(sudo virsh domstate e2e-runner || true)
+            if [[ -z "$domain_state" || "$domain_state" == "shut off" ]]; then
+              echo "cloud-init finished successfully"
+              break
+            fi
+            sleep 30
+          done
+
+      - name: Clean previous cache
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+
+          gh cache delete e2e-runner-vm || true
+          echo "Previous cache (if any) deleted"
+
+      - name: Cache the VM image
+        uses: actions/cache/save@v4
+        if: always() && steps.provision-vm.outcome == 'success'
+        with:
+          path: /tmp/vm/e2e-runner.img
+          key: e2e-runner-vm

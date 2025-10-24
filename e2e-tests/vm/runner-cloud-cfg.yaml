@@ -1,0 +1,72 @@
+#cloud-config
+password: ubuntu
+ssh_pwauth: true
+users:
+  - name: ubuntu
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    lock_passwd: false
+    gecos: Ubuntu
+    groups: sudo
+    homedir: /home/ubuntu
+    shell: /bin/bash
+chpasswd:
+  expire: false
+  users:
+    - {name: ubuntu, password: ubuntu, type: text}
+
+package_update: true
+package_upgrade: true
+packages:
+  - build-essential
+  - openssh-server
+  - ubuntu-desktop-minimal
+  - systemd-container
+
+write_files:
+  - path: /etc/dconf/profile/user
+    owner: root:root
+    permissions: '0644'
+    content: |
+      user-db:user
+      system-db:local
+
+  # Disable screen lock and sleep
+  - path: /etc/dconf/db/local.d/00-e2e-tests-requirements
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [org/gnome/settings-daemon/plugins/power]
+      sleep-inactive-ac-type='nothing'
+      sleep-inactive-ac-timeout=0
+
+      [org/gnome/desktop/session]
+      idle-delay=uint32 0
+
+  - path: /etc/ssh/sshd_config.d/authd.conf
+    content: |
+      UsePAM yes
+      Match User *@*
+          KbdInteractiveAuthentication yes
+
+runcmd:
+  # Disable apport
+  - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
+  - systemctl mask --now apport.service
+  # Disable automatic updates and remove some unnecessary packages
+  - apt-get remove -y update-manager gnome-initial-setup
+  # We don't need Firefox for the tests, so we can remove it to save some space
+  - snap remove firefox --purge
+  # Increase the default login timeout
+  - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
+  # Update dconf database
+  - dconf update
+  # Disable systemd-networkd-wait-online to speed up boot time
+  - sudo systemctl mask systemd-networkd-wait-online.service
+
+final_message: "Provisioning finished after $UPTIME seconds"
+
+power_state:
+  mode: poweroff
+  message: Shutting down instance after initial setup
+  condition: True
+  timeout: 30
