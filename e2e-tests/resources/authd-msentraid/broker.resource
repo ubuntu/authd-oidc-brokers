@@ -3,7 +3,8 @@ Documentation       MS Entra ID specific resources for the tests
 
 Resource            kvm.resource
 Resource            ../authd/utils.resource
-Library             ../authd/Command.py
+Library             ./Browser.py    AS    Browser
+Library             Hid.py    AS    Hid
 
 *** Variables ***
 ${ENTRAID_RESOURCES}    ${CURDIR}
@@ -72,7 +73,7 @@ Continue Log In With Remote User: Log In On External Browser
     ${text} =    Read Text
     ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
 
-    Command.Run    ${CURDIR}/browser_login.py    ${username}    %{E2E_PASSWORD}    ${user_code}
+    Browser.Login    ${username}    %{E2E_PASSWORD}    ${user_code}    ${OUTPUT DIR}
     Builtin.Sleep    5
 
 

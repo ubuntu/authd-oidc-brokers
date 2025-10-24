@@ -3,8 +3,9 @@ Documentation       authd test resources
 
 Resource            kvm.resource
 Library             ./StringUtils.py    AS    StringUtils
-Library             ./Command.py    AS    Command
+Library             ./VideoLogger.py    AS    VideoLogger
 Library             Process
+Library             OperatingSystem
 
 
 *** Keywords ***
@@ -114,3 +115,7 @@ Update And Upgrade Packages
     Run Command In Terminal    apt-get update
     Run Command In Terminal    apt-get upgrade -y
     Close Terminal In Sudo Mode
+
+
+Log Videos On Error
+    Run Keyword If    '${TEST STATUS}' == 'FAIL'    VideoLogger.Log videos
