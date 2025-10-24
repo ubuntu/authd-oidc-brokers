@@ -6,6 +6,7 @@ Resource        ./resources/broker/broker.resource
 
 Test Tags       robot:exit-on-failure
 
+Test Teardown    Log Videos On Error
 
 *** Variables ***
 ${username}    another-%{E2E_USER}
