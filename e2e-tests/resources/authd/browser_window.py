@@ -9,6 +9,7 @@ from gi.repository import (
     Gdk,
     Gtk,
     GLib,
+    Gio,
     WebKit2 as WebKit
 )  # type: ignore
 
@@ -121,48 +122,65 @@ class BrowserWindow(Gtk.Window):
                               poll_interval_ms=100):
         """Wait until `text` is present in the page's visible text or raise TimeoutError."""
         loop = GLib.MainLoop()
-        poll_id = 0
+        cancellable = Gio.Cancellable()
+        inject_delay_id = 0
         timeout_id = 0
         found = False
 
-        def on_js_finished(web_view, result):
-            nonlocal poll_id, timeout_id, found
+        # Use json.dumps / JSON.parse to safely escape the text into a JS string literal
+        js = f"(document?.body?.innerText?.includes(JSON.parse(`{json.dumps(text)}`)))"
 
+        def on_js_finished(web_view, result):
+            nonlocal inject_delay_id, found
+
+            final_action = cancellable.cancel
             try:
                 res = web_view.run_javascript_finish(result)
                 js_value = res.get_js_value()
                 found = js_value.to_boolean()
-            except Exception as e:
-                loop.quit()
+
+                if not found:
+                    # Retry
+                    final_action = lambda: None
+                    inject_javascript()
+                    return
+            except GLib.Error as e:
+                if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
+                    return
                 raise e
+            except Exception as e:
+                raise e
+            finally:
+                final_action()
 
-            if found:
-                if timeout_id:
-                    GLib.source_remove(timeout_id)
-                    timeout_id = 0
-                if poll_id:
-                    GLib.source_remove(poll_id)
-                    poll_id = 0
-                loop.quit()
+        def on_inject_js_timeout():
+            nonlocal inject_delay_id
 
-        def poll_fn():
-            # Use json.dumps / JSON.parse to safely escape the text into a JS string literal
-            js = f"(document?.body?.innerText?.includes(JSON.parse(`{json.dumps(text)}`)))"
-
-            self.web_view.run_javascript(js, None, on_js_finished)
-            return True  # keep polling until callback quits the loop
-
-        def on_timeout():
-            nonlocal poll_id
-            if poll_id:
-                GLib.source_remove(poll_id)
-                poll_id = 0
-            loop.quit()
+            self.web_view.run_javascript(js, cancellable, on_js_finished)
+            inject_delay_id = 0
             return False
 
-        poll_id = GLib.timeout_add(poll_interval_ms, poll_fn)
-        timeout_id = GLib.timeout_add(timeout_ms, on_timeout)
+        def inject_javascript():
+            nonlocal inject_delay_id
+
+            inject_delay_id = GLib.timeout_add(poll_interval_ms, on_inject_js_timeout)
+
+        def on_cancelled():
+            loop.quit()
+
+            if timeout_id:
+                GLib.source_remove(timeout_id)
+
+            if inject_delay_id:
+                GLib.source_remove(inject_delay_id)
+
+        connect_id = cancellable.connect(on_cancelled)
+        timeout_id = GLib.timeout_add(timeout_ms, cancellable.cancel)
+
+        inject_javascript()
         loop.run()
+
+        cancellable.disconnect(connect_id)
 
         if not found:
             raise TimeoutError(f"Timed out waiting for text: \"{text}\"")
