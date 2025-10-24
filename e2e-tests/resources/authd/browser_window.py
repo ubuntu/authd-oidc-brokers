@@ -220,7 +220,3 @@ def ascii_string_to_key_events(string):
     if len(string) != len(string.encode()):
         raise TypeError(f"{string} is not an ascii string")
     return [ord(ch) for ch in list(string)]
-
-
-def timeout_handler(signum, frame):
-    raise TimeoutError("Operation timed out")
