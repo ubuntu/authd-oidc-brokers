@@ -41,17 +41,20 @@ def main():
 
     screenshot_dir = os.path.join(args.output_dir, "webview-snapshots")
     os.makedirs(screenshot_dir, exist_ok=True)
-    try:
-        login(args.username, args.password, args.device_code, screenshot_dir)
-    finally:
-        render_video(screenshot_dir, os.path.join(args.output_dir, "webview_recording.webm"))
 
-
-def login(username: str, password: str, device_code: str, screenshot_dir: str = "."):
     Gtk.init(None)
     browser = BrowserWindow()
     browser.show_all()
 
+    try:
+        login(browser, args.username, args.password, args.device_code, screenshot_dir)
+    finally:
+        if browser.get_mapped():
+            browser.capture_snapshot(screenshot_dir, "failure")
+        render_video(screenshot_dir, os.path.join(args.output_dir, "webview_recording.webm"))
+
+
+def login(browser, username: str, password: str, device_code: str, screenshot_dir: str = "."):
     browser.web_view.load_uri("https://microsoft.com/devicelogin")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
