@@ -18,7 +18,6 @@ Required environment variables (or use the corresponding command-line options):
 
 Optional environment variables / flags:
   SNAPSHOT_ON_FAIL   If set, take a snapshot of the VM when a test fails
-  SHOW_WEBVIEW       If set, show the webview used for device authentication during tests
 
 Prerequisites:
   - A libvirt domain as set up by the vm/provision.sh script, with the snapshots:
@@ -31,7 +30,6 @@ Options:
   -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
   -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
       --snapshot-on-fail       Take a snapshot of the VM if a test fails
-      --show-webview           Show the webview used for device authentication during the tests
   -h, --help                   Show this help message and exit
 EOF
 }
@@ -60,10 +58,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --snapshot-on-fail)
             SNAPSHOT_ON_FAIL=1
-            shift
-            ;;
-        --show-webview)
-            export RUN_ONSCREEN=1
             shift
             ;;
         -h|--help)
