@@ -28,11 +28,7 @@ jobs:
             sshpass
 
           yarf_apt_dependencies: >-
-            clang
             libxkbcommon-dev
-            libcairo2-dev
-            libgirepository-2.0-dev
-            tesseract-ocr
             python3-tk
             python3-gi
             python3-cairo
@@ -69,6 +65,7 @@ jobs:
 
             sudo snap install --classic astral-uv
 
+            sudo apt-get update
             sudo apt-get install -y ${{ env.yarf_apt_dependencies }}
 
             pushd yarf
