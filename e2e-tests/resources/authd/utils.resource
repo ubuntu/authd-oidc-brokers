@@ -21,10 +21,15 @@ Log In
     BuiltIn.Sleep    5
     Hid.Move Pointer To Proportional    0    1
     Match Text    Show Apps    300
+    Update System Time
 
 
 Log Out
     Run Command    gnome-session-quit --logout --no-prompt
+
+
+Update System Time
+    Run Command In Terminal    sudo service chronyd restart && sudo chronyc waitsync
 
 
 Open Terminal
