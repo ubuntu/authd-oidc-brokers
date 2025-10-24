@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import cairo
 import subprocess
 
@@ -22,21 +23,20 @@ from browser_window import BrowserWindow, ascii_string_to_key_events  # type: ig
 
 
 def main():
-    if len(sys.argv) < 4:
-        print(f"Usage: {sys.argv[0]} <username> <password> <code> [<output-dir>]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
 
-    username = sys.argv[1]
-    password = sys.argv[2]
-    device_code = sys.argv[3]
-    output_dir = sys.argv[4] if len(sys.argv) > 4 else "."
-    screenshot_dir = os.path.join(output_dir, "webview")
+    parser.add_argument("username")
+    parser.add_argument("password")
+    parser.add_argument("device_code")
+    parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
+    args = parser.parse_args()
+
+    screenshot_dir = os.path.join(args.output_dir, "webview-snapshots")
     os.makedirs(screenshot_dir, exist_ok=True)
-
     try:
-        login(username, password, device_code, screenshot_dir)
+        login(args.username, args.password, args.device_code, screenshot_dir)
     finally:
-        write_video(screenshot_dir, os.path.join(output_dir, "webview_recording.webm"))
+        write_video(screenshot_dir, os.path.join(args.output_dir, "webview_recording.webm"))
 
 
 def login(username: str, password: str, device_code: str, screenshot_dir: str = "."):
