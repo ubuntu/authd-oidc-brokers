@@ -1,3 +1,4 @@
+import json
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -105,6 +106,53 @@ class BrowserWindow(Gtk.Window):
 
         overlay.destroy()
         self.web_view.grab_focus()
+
+    def wait_for_text_visible(self, text, timeout_ms=5000,
+                              poll_interval_ms=100):
+        """Wait until `text` is present in the page's visible text or raise TimeoutError."""
+        loop = GLib.MainLoop()
+        poll_id = None
+        timeout_id = None
+        found = False
+
+        def on_js_finished(web_view, result, user_data):
+            nonlocal poll_id, timeout_id, found
+            try:
+                res = web_view.run_javascript_finish(result)
+                js_value = res.get_js_value()
+                found = bool(js_value.to_boolean())
+            except Exception:
+                found = False
+
+            if found:
+                if timeout_id:
+                    GLib.source_remove(timeout_id)
+                if poll_id:
+                    GLib.source_remove(poll_id)
+                loop.quit()
+
+        def poll_fn():
+            # Use json.dumps to safely escape the text into a JS string literal
+            js = (
+                     "Boolean(document.body && document.body.innerText && "
+                     "document.body.innerText.indexOf(%s) !== -1)"
+                 ) % json.dumps(text)
+            self.web_view.run_javascript(js, None, on_js_finished, None)
+            return True  # keep polling until callback quits the loop
+
+        def on_timeout():
+            nonlocal poll_id
+            if poll_id:
+                GLib.source_remove(poll_id)
+            loop.quit()
+            return False
+
+        poll_id = GLib.timeout_add(poll_interval_ms, poll_fn)
+        timeout_id = GLib.timeout_add(timeout_ms, on_timeout)
+        loop.run()
+
+        if not found:
+            raise TimeoutError(f"Timed out waiting for text: \"{text}\"")
 
     def send_key(self, event_type, key):
         default_seat = Gdk.Display.get_default().get_default_seat()
