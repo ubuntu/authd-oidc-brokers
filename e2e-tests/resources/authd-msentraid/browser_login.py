@@ -21,7 +21,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "a
 from browser_window import (
     BrowserWindow,
     ascii_string_to_key_events,
-    render_video,
 )  # type: ignore # This is resolved at runtime
 
 
@@ -46,12 +45,14 @@ def main():
     browser = BrowserWindow()
     browser.show_all()
 
+    browser.start_recording()
+
     try:
         login(browser, args.username, args.password, args.device_code, screenshot_dir)
     finally:
         if browser.get_mapped():
             browser.capture_snapshot(screenshot_dir, "failure")
-        render_video(screenshot_dir, os.path.join(args.output_dir, "webview_recording.webm"))
+        browser.stop_recording(os.path.join(args.output_dir, "webview_recording.webm"))
 
 
 def login(browser, username: str, password: str, device_code: str, screenshot_dir: str = "."):

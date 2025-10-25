@@ -2,7 +2,9 @@ import cairo
 import json
 import gi
 import os
+import time
 import subprocess
+import tempfile
 import traceback
 import sys
 
@@ -31,8 +33,12 @@ class BrowserWindow(Gtk.Window):
 
         self._draw_monitors_cancellable = None
         self._draw_monitors = []
-        self._snapshot_index = 0
+        self._snapshots_indexes = {}
         self._snapshotting = False
+        self._recording_path = None
+        self._recording_fps = 0
+        self._recording_cancellable = None
+        self._recoding_cancellable_id = 0
 
         self.web_view = WebKit.WebView()
         self.web_view.get_settings().enableJavascript = True
@@ -81,6 +87,8 @@ class BrowserWindow(Gtk.Window):
     def _on_destroy(self):
         if self._draw_monitors_cancellable:
             self._draw_monitors_cancellable.cancel()
+
+        self.stop_recording()
 
     def draw_event_connect(self, callback):
         idle_id = 0
@@ -339,12 +347,61 @@ class BrowserWindow(Gtk.Window):
         self._snapshotting = False
 
         # Write to file
-        file_path = os.path.join(path, f"{self._snapshot_index:05}-{filename}.{ext}")
-        self._snapshot_index += 1
-        return file_path
+        snapshot_index = self._snapshots_indexes.setdefault(path, 0)
+        file_path = os.path.join(path, f"{snapshot_index:05}-{filename}.{ext}")
+        self._snapshots_indexes[path] += 1
 
         self._run_async_task(lambda: surface.write_to_png(file_path),
                              cancellable=cancellable, wait=sync)
+        return file_path
+
+    def start_recording(self, fps: int = 5):
+        if self._recording_cancellable:
+            raise Exception("Recording is already in progress")
+
+        cancellable = Gio.Cancellable()
+        timeout = 0
+        max_delay_ms = 1000 / fps
+
+        self._recording_path = tempfile.TemporaryDirectory(prefix="authd-browser")
+
+        def save_snapshot():
+            nonlocal timeout
+
+            self.capture_snapshot(self._recording_path.name,
+                                  filename="frame", sync=False,
+                                  cancellable=cancellable)
+
+            timeout = GLib.timeout_add(max_delay_ms, save_snapshot)
+
+        save_snapshot()
+
+        def on_cancelled():
+            if timeout:
+                GLib.source_remove(timeout)
+
+            self._recording_cancellable = None
+
+        self._recoding_cancellable_id = cancellable.connect(on_cancelled)
+        self._recording_cancellable = cancellable
+        self._recording_fps = fps
+
+    def stop_recording(self, rendered_output: str = None):
+        if not self._recording_cancellable:
+            return
+
+        cancellable = self._recording_cancellable
+        self._recording_cancellable.cancel()
+        cancellable.disconnect(self._recoding_cancellable_id)
+        self._recoding_cancellable_id = 0
+
+        if rendered_output:
+            self._run_async_task(lambda: render_video(self._recording_path.name,
+                                                      rendered_output,
+                                                      self._recording_fps))
+
+        self._recording_path.cleanup()
+        self._recording_fps = 0
 
 
 def ascii_string_to_key_events(string):
