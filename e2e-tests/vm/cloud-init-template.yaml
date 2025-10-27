@@ -32,17 +32,23 @@ write_files:
       user-db:user
       system-db:local
 
-  # Disable screen lock and sleep
+  # Configure dconf
   - path: /etc/dconf/db/local.d/00-e2e-tests-requirements
     owner: root:root
     permissions: '0644'
     content: |
+      # Disable automatic suspend when plugged in
       [org/gnome/settings-daemon/plugins/power]
       sleep-inactive-ac-type='nothing'
       sleep-inactive-ac-timeout=0
 
+      # Disable screen blanking
       [org/gnome/desktop/session]
       idle-delay=uint32 0
+
+      # Use larger text for better OCR results
+      [org/gnome/desktop/interface]
+      text-scaling-factor=1.25
 
   - path: /etc/ssh/sshd_config.d/authd.conf
     content: |
