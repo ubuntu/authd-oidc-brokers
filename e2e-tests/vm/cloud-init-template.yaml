@@ -25,6 +25,11 @@ packages:
   - systemd-container
 
 write_files:
+  - path: /root/.ssh/authorized_keys
+    owner: root:root
+    permissions: '0600'
+    content: ${SSH_PUBLIC_KEY}
+
   - path: /etc/dconf/profile/user
     owner: root:root
     permissions: '0644'
