@@ -29,7 +29,7 @@ Log Out
 
 
 Update System Time
-    Run Command In Terminal    sudo service chronyd restart && sudo chronyc waitsync
+    Run Command In Terminal    sudo systemctl restart chronyd && sudo chronyc waitsync
 
 
 Open Terminal
