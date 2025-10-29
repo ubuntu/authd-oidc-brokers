@@ -76,8 +76,9 @@ Check That User Is Redirected To Local Broker
     Match Text    Password:    30
 
 
-Check That User Information Can Not Be Fetched
-    Match Text    authentication failure: could not fetch user info    30
+Check That Authenticated User Does Not Match Requested User
+    [Arguments]    ${requested_user}
+    Match Text    Authentication failure: requested username "${requested_user}" does not match the authenticated username    30
 
 
 Check That Remote User Can Run Sudo Commands
