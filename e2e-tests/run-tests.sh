@@ -101,6 +101,7 @@ fi
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 mkdir -p "${TEST_RUNS_DIR}"
 TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
+ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 cd "${TEST_RUN_DIR}"
 mkdir -p output resources
 
