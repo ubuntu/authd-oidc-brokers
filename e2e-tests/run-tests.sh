@@ -86,8 +86,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ]; then
-    echo "Error: E2E_USER, E2E_PASSWORD, and BROKER must be set either as environment variables or via command line arguments."
+if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] || [ -z "${TOTP_SECRET:-}" ]; then
+    echo "Error: E2E_USER, E2E_PASSWORD, BROKER, and TOTP_SECRET must be set either as environment variables or via command line arguments."
     usage
     exit 1
 fi
