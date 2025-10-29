@@ -11,7 +11,7 @@ def generate_totp(secret: str) -> str:
     key = base64.b32decode(secret, True)
     msg = struct.pack(">Q", int(time.time()) // 30)
     hashed_obj = hmac.new(key, msg, hashlib.sha1).digest()
-    o = o = hashed_obj[19] & 15
+    o = hashed_obj[19] & 15
 
     totp_code = str((struct.unpack(">I", hashed_obj[o:o + 4])[0] & 0x7fffffff) % 1000000)
     while len(totp_code) != 6:
