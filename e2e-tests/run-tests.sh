@@ -140,7 +140,7 @@ for test_file in $TESTS_TO_RUN; do
 
     if [ "${test_result:-0}" -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
         echo "Test failed. Saving VM snapshot as requested..."
-        virsh snapshot-create-as e2e-runner "${test_name}-fail-$(date +%Y%m%d%H%M)"
+        virsh snapshot-create-as "${VM_NAME}" "${test_name}-fail-$(date +%Y%m%d%H%M)"
         echo "Snapshot '${test_name}-fail-$(date +%Y%m%d%H%M)' created."
     fi
 
