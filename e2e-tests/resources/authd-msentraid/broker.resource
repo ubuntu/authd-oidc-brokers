@@ -114,7 +114,7 @@ Log In With Remote User Through CLI: Local Password
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
-    Run Command In Terminal    sudo sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Terminal    sudo sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
     Run Command In Terminal    sudo snap restart authd-msentraid
 
 
@@ -122,13 +122,13 @@ Change Broker Configuration
 # shifted characters yet, we need to do some workarounds.
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
-    Run Command In Terminal    sudo sed -i 's/#*allowed_users = .*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Terminal    sudo sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
     Run Command In Terminal    sudo snap restart authd-msentraid
 
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
-    Run Command In Terminal    sudo sed -i 's/#*${config_key} = .*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Terminal    sudo sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
     Run Command In Terminal    sudo snap restart authd-msentraid
 
 
