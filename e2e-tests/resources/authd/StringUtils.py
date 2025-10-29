@@ -1,3 +1,4 @@
+from robot.api import logger
 from robot.api.deco import keyword, library  # type: ignore
 
 
@@ -19,6 +20,7 @@ class StringUtils:
 
         match = re.search(regex, text)
         if match:
+            logger.debug(f"Matched regex '{regex}' against text '{text}': {match.groups()}")
             return match.group(len(match.groups()))
         else:
             raise ValueError(f"No match found for {regex} in {text}")
