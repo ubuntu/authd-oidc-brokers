@@ -22,7 +22,7 @@ def run_command(command: str, *arguments):
 @library
 class Browser:
     @keyword
-    async def login(self, username: str, password: str, usercode: str, output_dir: str = "."):
+    async def login(self, username: str, password: str, usercode: str, totp_secret: str, output_dir: str = "."):
         """Perform device authentication with the given username, password and usercode."""
         login_script = os.path.join(SCRIPT_DIR, "browser_login.py")
-        run_command(login_script, username, password, usercode, "--output-dir", output_dir)
+        run_command(login_script, username, password, usercode, totp_secret, "--output-dir", output_dir)

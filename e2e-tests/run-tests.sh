@@ -14,6 +14,7 @@ if the test fails.
 Required environment variables (or use the corresponding command-line options):
   E2E_USER           The username used for authd login in the tests
   E2E_PASSWORD       The password used for authd login in the tests
+  TOTP_SECRET        The secret used to generate OTP codes for the E2E_USER's MFA
   BROKER             The broker to test (e.g., authd-msentraid)
 
 Optional environment variables / flags:
@@ -28,6 +29,7 @@ Prerequisites:
 Options:
   -u, --user USERNAME          Username for the tests (can also be set via E2E_USER environment variable)
   -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
+  -s, --totp-secret SECRET     Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
   -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
       --snapshot-on-fail       Take a snapshot of the VM if a test fails
   -h, --help                   Show this help message and exit
@@ -54,6 +56,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --broker|-b)
             BROKER="$2"
+            shift 2
+            ;;
+        --totp-secret|-s)
+            TOTP_SECRET="$2"
             shift 2
             ;;
         --snapshot-on-fail)
@@ -130,6 +136,7 @@ for test_file in $TESTS_TO_RUN; do
     echo "Running test: ${test_name}"
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
+    TOTP_SECRET="$TOTP_SECRET" \
     VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
     yarf --outdir "output/${test_name}" --platform=Vnc . "$@" || test_result=$?
 

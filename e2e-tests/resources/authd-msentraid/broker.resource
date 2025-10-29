@@ -73,7 +73,7 @@ Continue Log In With Remote User: Log In On External Browser
     ${text} =    Read Text
     ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
 
-    Browser.Login    ${username}    %{E2E_PASSWORD}    ${user_code}    ${OUTPUT DIR}
+    Browser.Login    ${username}    %{E2E_PASSWORD}    ${user_code}    %{TOTP_SECRET}    ${OUTPUT DIR}
     Builtin.Sleep    5
 
 
