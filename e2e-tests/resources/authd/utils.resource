@@ -3,7 +3,7 @@ Documentation       authd test resources
 
 Resource            kvm.resource
 Library             ./StringUtils.py    AS    StringUtils
-Library            ./VideoLogger.py    AS    VideoLogger
+Library             ./VideoLogger.py    AS    VideoLogger
 Library             Process
 Library             OperatingSystem
 
