@@ -64,14 +64,14 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
 
-    browser.wait_for_stable_page()
     browser.wait_for_text_visible("Enter code to allow access")
+    browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-code")
     browser.send_key_taps(
         ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
 
-    browser.wait_for_stable_page()
     browser.wait_for_text_visible("Sign in")
+    browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
     browser.send_key_taps(
         ascii_string_to_key_events(username) + [Gdk.KEY_Return])
@@ -88,13 +88,13 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     # browser.send_key_taps(
     #     ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
 
-    browser.wait_for_stable_page()
     browser.wait_for_text_visible("Are you trying to sign in")
+    browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-confirm-signin")
     browser.send_key_taps([Gdk.KEY_Return])
 
-    browser.wait_for_stable_page()
     browser.wait_for_text_visible("You have signed in")
+    browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-success")
 
 
