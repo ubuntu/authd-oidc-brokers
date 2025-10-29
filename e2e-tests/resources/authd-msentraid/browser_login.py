@@ -24,6 +24,7 @@ from browser_window import (
     maybe_run_offscreen,
 )  # type: ignore # This is resolved at runtime
 
+from generate_totp import generate_totp # type: ignore # This is resolved at runtime
 
 SNAPSHOT_INDEX = 0
 
@@ -34,6 +35,7 @@ def main():
     parser.add_argument("username")
     parser.add_argument("password")
     parser.add_argument("device_code")
+    parser.add_argument("totp_secret")
     parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
     parser.add_argument("--show-webview", action="store_true")
     args = parser.parse_args()
@@ -53,7 +55,7 @@ def main():
     browser.start_recording()
 
     try:
-        login(browser, args.username, args.password, args.device_code, screenshot_dir)
+        login(browser, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir)
     finally:
         if browser.get_mapped():
             browser.capture_snapshot(screenshot_dir, "failure")
@@ -61,32 +63,38 @@ def main():
         browser.destroy()
 
 
-def login(browser, username: str, password: str, device_code: str, screenshot_dir: str = "."):
+def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
     browser.web_view.load_uri("https://microsoft.com/devicelogin")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
 
     browser.wait_for_text_visible("Enter code to allow access")
     browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login")
+    browser.capture_snapshot(screenshot_dir, "device-login-enter-code")
     browser.send_key_taps(
         ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
 
     browser.wait_for_text_visible("Sign in")
     browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login-enter-code")
+    browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
     browser.send_key_taps(
         ascii_string_to_key_events(username) + [Gdk.KEY_Return])
 
     browser.wait_for_text_visible("Enter password")
     browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
+    browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
+    # browser.wait_for_text_visible("Enter code")
+    # browser.wait_for_stable_page()
+    # browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
+    # browser.send_key_taps(
+    #     ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+
     browser.wait_for_text_visible("Are you trying to sign in")
     browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
+    browser.capture_snapshot(screenshot_dir, "device-login-confirm-signin")
     browser.send_key_taps([Gdk.KEY_Return])
 
     browser.wait_for_text_visible("You have signed in")
