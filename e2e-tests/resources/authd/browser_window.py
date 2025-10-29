@@ -250,7 +250,7 @@ class BrowserWindow(Gtk.Window):
         cancellable.disconnect(connect_id)
 
         if not found:
-            raise TimeoutError(f"Timed out waiting for text: {text}")
+            raise TimeoutError(f"Timed out waiting for text: \"{text}\"")
 
     def send_key(self, event_type, key):
         default_seat = Gdk.Display.get_default().get_default_seat()
