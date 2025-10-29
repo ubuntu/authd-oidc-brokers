@@ -25,4 +25,4 @@ Fail to login if usernames do not match
     Start Log In With Remote User Through CLI: QR Code   different_user
     Select Provider
     Continue Log In With Remote User: Log In On External Browser   ${username}
-    Check That User Information Can Not Be Fetched
+    Check That Authenticated User Does Not Match Requested User    different_user
