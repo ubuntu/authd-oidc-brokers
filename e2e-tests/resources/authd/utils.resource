@@ -76,15 +76,20 @@ Log Out From Terminal Session
     Hid.Keys Combo    Control_L    ]
 
 
-# Hacky way of making the tool recognize that the command finished successfully by running it in the format of:
-# $ clear && {command} && echo cmd-finished
 Run Command In Terminal
     [Arguments]    ${command}
     Open Terminal
+    Run Command In Focused Terminal    ${command}
+    Close Focused Window
+
+
+# Hacky way of making the tool recognize that the command finished successfully by running it in the format of:
+# $ clear && {command} && echo cmd-finished
+Run Command In Focused Terminal
+    [Arguments]    ${command}
     Hid.Type String   clear && ${command} & clear && wait && echo cmd-finished
     Hid.Keys Combo    Return
     Match Text    cmd-finished    600
-    Close Focused Window
 
 
 Left Button Click
@@ -114,8 +119,8 @@ Cancel Operation
 
 Update And Upgrade Packages
     Open Terminal In Sudo Mode
-    Run Command In Terminal    apt-get update
-    Run Command In Terminal    apt-get upgrade -y
+    Run Command In Focused Terminal    apt-get update
+    Run Command In Focused Terminal    apt-get upgrade -y
     Close Terminal In Sudo Mode
 
 Sync System Time

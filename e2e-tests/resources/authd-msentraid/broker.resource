@@ -16,16 +16,14 @@ ${ENTRAID_BROKER_CFG_DIR}    /var/snap/authd-msentraid/current/broker.conf.d
 
 *** Keywords ***
 Enable Edge Broker
-    Open Terminal In Sudo Mode
-    Run Command In Terminal    snap refresh authd-msentraid --edge
-    Close Terminal In Sudo Mode
+    Run Command In Terminal    sudo snap refresh authd-msentraid --edge
 
 
 Disable Broker And Purge Config
     Open Terminal In Sudo Mode
-    Run Command In Terminal    snap stop authd-msentraid
-    Run Command In Terminal    rm ${AUTHD_BROKER_CFG}
-    Run Command In Terminal    systemctl restart authd.service
+    Run Command In Focused Terminal    snap stop authd-msentraid
+    Run Command In Focused Terminal    rm ${AUTHD_BROKER_CFG}
+    Run Command In Focused Terminal    systemctl restart authd.service
     Close Terminal In Sudo Mode
 
 
@@ -119,9 +117,8 @@ Log In With Remote User Through CLI: Local Password
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
     Open Terminal In Sudo Mode
-    Hid.Type String    sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Hid.Keys Combo    Return
-    Run Command In Terminal    snap restart authd-msentraid
+    Run Command In Focused Terminal    sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Focused Terminal    snap restart authd-msentraid
     Close Terminal In Sudo Mode
 
 
@@ -130,13 +127,13 @@ Change Broker Configuration
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
     Run Command In Terminal    sudo sed -i 's/#*allowed_users = .*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Terminal    snap restart authd-msentraid
+    Run Command In Terminal    sudo snap restart authd-msentraid
 
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
     Run Command In Terminal    sudo sed -i 's/#*${config_key} = .*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Terminal    snap restart authd-msentraid
+    Run Command In Terminal    sudo snap restart authd-msentraid
 
 
 Log In With Remote User Through SSH: QR Code
