@@ -115,8 +115,6 @@ fi
 source "${YARF_DIR}/.venv/bin/activate"
 
 # Run the YARF tests
-tests_failed=
-test_results=()
 for test_file in $TESTS_TO_RUN; do
     test_name=$(basename "${test_file}")
 
@@ -127,36 +125,21 @@ for test_file in $TESTS_TO_RUN; do
     # Ensure the test run directory is cleaned up on exit
     # shellcheck disable=SC2064 # We want to capture the current value of test_name
     trap "rm -rf ${test_name} resources" EXIT
-
-    echo "Running test: ${test_name}"
-    E2E_USER="$E2E_USER" \
-    E2E_PASSWORD="$E2E_PASSWORD" \
-    TOTP_SECRET="$TOTP_SECRET" \
-    BROKER="$BROKER" \
-    VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-    yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
-        2> >(grep -v "<video controls style" >&2) || \
-        test_result=$?
-
-    if [ "${test_result:-0}" -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
-        echo "Test failed. Saving VM snapshot as requested..."
-        virsh snapshot-create-as "${VM_NAME}" "${test_name}-fail-$(date +%Y%m%d%H%M)"
-        echo "Snapshot '${test_name}-fail-$(date +%Y%m%d%H%M)' created."
-    fi
-
-    if [ "${test_result:-0}" -ne 0 ]; then
-        tests_failed=1
-        test_results+=("${test_name}: FAILED")
-    else
-        test_results+=("${test_name}: OK")
-    fi
-    rm -f "${test_name}"
 done
 
-for result in "${test_results[@]}"; do
-    echo "${result}"
-done
+E2E_USER="$E2E_USER" \
+E2E_PASSWORD="$E2E_PASSWORD" \
+TOTP_SECRET="$TOTP_SECRET" \
+BROKER="$BROKER" \
+VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
+yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
+    2> >(grep -v "<video controls style" >&2) || \
+    test_result=$?
 
-if [ -n "${tests_failed}" ]; then
-    exit 1
+if [ "${test_result:-0}" -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
+    echo "Test failed. Saving VM snapshot as requested..."
+    virsh snapshot-create-as "${VM_NAME}" "${test_name}-fail-$(date +%Y%m%d%H%M)"
+    echo "Snapshot '${test_name}-fail-$(date +%Y%m%d%H%M)' created."
 fi
+
+exit "${test_result:-0}"
