@@ -93,11 +93,12 @@ Run Command In Terminal
     Close Focused Window
 
 
-# Hacky way of making the tool recognize that the command finished successfully by running it in the format of:
-# $ clear && {command} && echo cmd-finished
 Run Command In Focused Terminal
     [Arguments]    ${command}
-    Hid.Type String   clear && ${command} & clear && wait && echo cmd-finished
+    # Y21kLWZpbmlzaGVkCg== is the base64 encoding of "cmd-finished\n"
+    # We use it to avoid that the `Match Text` below matches the command itself,
+    # before the first clear is executed.
+    Hid.Type String   clear && ${command} && echo Y21kLWZpbmlzaGVkCg== | base64 -d
     Hid.Keys Combo    Return
     Match Text    cmd-finished    600
 
