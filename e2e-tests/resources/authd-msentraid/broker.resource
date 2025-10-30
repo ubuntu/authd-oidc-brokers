@@ -228,8 +228,7 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Hid.Move Pointer To Proportional    0    1
-    Match Text    Show Apps    60
+    Wait Until Desktop Ready
 
 
 Log In With Remote User Through GDM: Local Password
@@ -247,8 +246,7 @@ Log In With Remote User Through GDM: Local Password
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Hid.Move Pointer To Proportional    0    1
-    Match Text    Show Apps    60
+    Wait Until Desktop Ready
 
 
 Check User Information
