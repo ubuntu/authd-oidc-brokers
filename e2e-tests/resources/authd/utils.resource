@@ -94,13 +94,13 @@ Run Command In Terminal
 
 
 Run Command In Focused Terminal
-    [Arguments]    ${command}
+    [Arguments]    ${command}    ${timeout}=${600}
     # Y21kLWZpbmlzaGVkCg== is the base64 encoding of "cmd-finished\n"
     # We use it to avoid that the `Match Text` below matches the command itself,
     # before the first clear is executed.
     Hid.Type String   clear && ${command} && echo Y21kLWZpbmlzaGVkCg== | base64 -d
     Hid.Keys Combo    Return
-    Match Text    cmd-finished    600
+    Match Text    cmd-finished    ${timeout}
 
 
 Left Button Click
@@ -131,7 +131,7 @@ Cancel Operation
 Update And Upgrade Packages
     Open Terminal In Sudo Mode
     Run Command In Focused Terminal    apt-get update
-    Run Command In Focused Terminal    apt-get upgrade -y
+    Run Command In Focused Terminal    apt-get upgrade -y    timeout=1200
     Close Terminal In Sudo Mode
 
 Sync System Time
