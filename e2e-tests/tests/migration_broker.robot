@@ -23,6 +23,8 @@ Log in with local user
 Log in with remote user with device authentication
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
+    Log Out From Terminal Session
+    Close Focused Window
 
 
 Check remote user is properly added to the system
