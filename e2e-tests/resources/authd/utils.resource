@@ -18,15 +18,23 @@ Log In
     Hid.Type String    ubuntu
     BuiltIn.Sleep    2
     Hid.Keys Combo    Return
-    BuiltIn.Sleep    2
-    # Give some time for the desktop to settle
-    BuiltIn.Sleep    5
-    Hid.Move Pointer To Proportional    0    1
-    Match Text    Show Apps    300
+    Wait Until Desktop Ready
 
 
 Log Out
     Run Command    gnome-session-quit --logout --no-prompt
+
+
+Wait Until Desktop Ready
+    Wait Until Keyword Succeeds    1 min    1 sec
+    ...    Try Desktop Ready
+
+
+Try Desktop Ready
+    Hid.Move Pointer To Proportional    1    1
+    BuiltIn.Sleep    1
+    Hid.Move Pointer To Proportional    0    1
+    Match Text    Show Apps    10
 
 
 Open Terminal
