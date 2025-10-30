@@ -282,9 +282,9 @@ Check Home Directory
     Hid.Type String    echo $HOME
     Hid.Keys Combo    Return
     Match Text    /home/${username}    30
-    Hid.Type String    ls -l
+    Hid.Type String    stat -c %U:%G $HOME
     Hid.Keys Combo    Return
-    Match Text    ${username} ${username}
+    Match Text    ${username}:${username}
 
 
 Check That Remote User Is Not Allowed To Log In
