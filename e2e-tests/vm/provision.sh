@@ -246,6 +246,9 @@ if ! cloud_init_finished "${IMAGE}"; then
     virsh await "${VM_NAME}" --condition domain-inactive --timeout "${CLOUT_INIT_TIMEOUT}"
     kill "${VM_CONSOLE_PID}" || true
 
+    # Detach the cloud-init iSO
+    virsh detach-disk "${VM_NAME}" sda --config
+
     # Boot the VM and wait until it's running
     virsh start "${VM_NAME}"
     wait_for_system_running
