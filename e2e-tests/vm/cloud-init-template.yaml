@@ -19,10 +19,22 @@ chpasswd:
 package_update: true
 package_upgrade: true
 packages:
-  - build-essential
+  - fonts-ubuntu
+  - gdm3
+  - gnome-shell
+  - gnome-shell-extension-ubuntu-dock
+  - gsettings-ubuntu-schemas
   - openssh-server
-  - ubuntu-desktop-minimal
+  - policykit-desktop-privileges
+  # Default terminal on questing
+  - ptyxis
+  - spice-vdagent
+  # Required for add-apt-repository
+  - software-properties-common
   - systemd-container
+  - ubuntu-settings
+  - yaru-theme-gtk
+  - yaru-theme-icon
 
 write_files:
   - path: /etc/dconf/profile/user
@@ -60,10 +72,6 @@ runcmd:
   # Disable apport
   - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
   - systemctl mask --now apport.service
-  # Disable automatic updates and remove some unnecessary packages
-  - apt-get remove -y update-manager gnome-initial-setup
-  # We don't need Firefox for the tests, so we can remove it to save some space
-  - snap remove firefox --purge
   # Increase the default login timeout
   - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
   # Update dconf database
