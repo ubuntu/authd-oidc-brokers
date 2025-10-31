@@ -21,6 +21,7 @@ EOF
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template.yaml"
 LIBVIRT_XML_TEMPLATE="${SCRIPT_DIR}/e2e-runner-template.xml"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
 ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts"
 SSH="${SCRIPT_DIR}/ssh.sh"
 
@@ -171,26 +172,24 @@ sudo apt-get -y install \
     xvfb
 
 # Download the image
-mkdir -p "${ARTIFACTS_DIR}"
 IMAGE_URL="https://cloud-images.ubuntu.com/questing/current/questing-server-cloudimg-amd64.img"
-IMAGE_FILE="${ARTIFACTS_DIR}/questing-server-cloudimg-amd64.img"
-if [ ! -f "${IMAGE_FILE}" ]; then
-    wget -O "${IMAGE_FILE}" "${IMAGE_URL}"
+SOURCE_IMAGE="${CACHE_DIR}/questing-server-cloudimg-amd64.img"
+if [ ! -f "${SOURCE_IMAGE}" ]; then
+    mkdir -p "${CACHE_DIR}"
+    wget -O "${SOURCE_IMAGE}" "${IMAGE_URL}"
 else
-    echo "Image file already exists: ${IMAGE_FILE}"
+    echo "Source image already exists: ${SOURCE_IMAGE}"
 fi
 
 # Copy and resize the image
-IMAGE_FILE_ORIG="${IMAGE_FILE}"
-IMAGE_FILE="${ARTIFACTS_DIR}/e2e-runner.qcow2"
-if [ ! -f "${IMAGE_FILE}" ]; then
-    # Copy the image to avoid modifying the original
-    cp "${IMAGE_FILE_ORIG}" "${IMAGE_FILE}"
+IMAGE="${ARTIFACTS_DIR}/e2e-runner.qcow2"
+if [ ! -f "${IMAGE}" ]; then
+    mkdir -p "${ARTIFACTS_DIR}"
+    cp "${SOURCE_IMAGE}" "${IMAGE}"
 
-    # Resize the image to 10GB
-    qemu-img resize "${IMAGE_FILE}" 10G
+    qemu-img resize "${IMAGE}" 10G
 else
-    echo "Copied image file already exists: ${IMAGE_FILE}"
+    echo "Image already exists: ${IMAGE}"
 fi
 
 # Create a cloud-init ISO
@@ -210,7 +209,7 @@ fi
 # Create the libvirt XML
 LIBVIRT_XML="${ARTIFACTS_DIR}/e2e-runner.xml"
 if [ ! -f "${LIBVIRT_XML}" ]; then
-    IMAGE_FILE=${IMAGE_FILE} \
+    IMAGE_FILE=${IMAGE} \
       envsubst < "${LIBVIRT_XML_TEMPLATE}" > "${LIBVIRT_XML}"
 else
     echo "Libvirt XML file already exists: ${LIBVIRT_XML}"
@@ -236,7 +235,7 @@ if virsh domstate "${VM_NAME}" | grep -q '^running'; then
 fi
 
 # Start the VM and wait for it to finish the initial setup
-if ! cloud_init_finished "${IMAGE_FILE}"; then
+if ! cloud_init_finished "${IMAGE}"; then
     # Start the VM to let cloud-init do its work
     virsh start "${VM_NAME}"
 
