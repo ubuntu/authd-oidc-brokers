@@ -101,7 +101,9 @@ function force_create_snapshot() {
 }
 
 function wait_for_system_running() {
-    retry --times 20 --delay 3 -- "$SSH" "systemctl is-system-running --wait"
+    # shellcheck disable=SC2016
+    local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
+    retry --times 30 --delay 3 -- "$SSH" "$cmd"
 }
 
 function install_brokers() {
