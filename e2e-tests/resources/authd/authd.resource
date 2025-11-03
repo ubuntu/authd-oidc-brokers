@@ -31,9 +31,9 @@ Get NSS Group Entries For Remote User
     Hid.Keys Combo    Return
 
 
-Change Local Password Of Remote User
-    [Arguments]    ${username}    ${local_password}    ${new_password}
-    Hid.Type String    passwd ${username}
+Change Password
+    [Arguments]    ${local_password}    ${new_password}
+    Hid.Type String    passwd
     Hid.Keys Combo    Return
 
     Match Text    Enter your local password:    15

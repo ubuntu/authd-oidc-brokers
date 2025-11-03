@@ -29,9 +29,11 @@ Log in with remote user with device authentication
 
 
 Change local password of remote user
-    Open Terminal In Sudo Mode
-    Change Local Password Of Remote User    ${username}    ${local_password}    ${new_password}
-    Close Terminal In Sudo Mode
+    Open Terminal
+    Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
+    Change Password    ${local_password}    ${new_password}
+    Log Out From Terminal Session
+    Close Focused Window
 
 
 Log in with remote user with local password
