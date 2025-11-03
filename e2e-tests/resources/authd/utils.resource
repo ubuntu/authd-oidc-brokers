@@ -85,6 +85,12 @@ Log Out From Terminal Session
     Hid.Keys Combo    Control_L    ]
 
 
+Log Out From SSH Session
+    Hid.Type String    exit
+    Hid.Keys Combo    Return
+    Match Text    ubuntu@ubuntu    30
+
+
 Run Command In Terminal
     [Arguments]    ${command}
     Open Terminal

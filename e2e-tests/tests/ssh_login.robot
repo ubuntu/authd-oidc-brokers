@@ -23,7 +23,7 @@ Log in with local user
 Log in with remote user with device authentication through SSH
     Open Terminal
     Log In With Remote User Through SSH: QR Code    ${username}    ${local_password}
-    Log Out From Terminal Session
+    Log Out From SSH Session
     Close Focused Window
 
 
