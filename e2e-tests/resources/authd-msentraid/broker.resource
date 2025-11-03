@@ -5,6 +5,7 @@ Resource            kvm.resource
 Resource            ../authd/utils.resource
 Library             ./Browser.py    AS    Browser
 Library             Hid.py    AS    Hid
+Library             String
 
 *** Variables ***
 ${ENTRAID_RESOURCES}    ${CURDIR}
@@ -70,6 +71,9 @@ Continue Log In With Remote User: Log In On External Browser
     # Read the user code.
     ${text} =    Read Text
     ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
+    # The user code is all uppercase, but sometimes the OCR reads some letters as lowercase,
+    # so convert it to uppercase to handle that.
+    ${user_code} =    String.Convert To Upper Case    ${user_code}
 
     Browser.Login    ${username}    %{E2E_PASSWORD}    ${user_code}    %{TOTP_SECRET}    ${OUTPUT DIR}
     Builtin.Sleep    5
