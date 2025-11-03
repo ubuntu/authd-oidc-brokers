@@ -2,6 +2,8 @@ import os.path
 
 from robot.api.deco import keyword, library  # type: ignore
 
+import ExecUtils
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SSH_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "ssh.sh"))
 
@@ -17,9 +19,7 @@ class SSH:
         Returns:
             The output of the command.
         """
-        import subprocess
-
-        result = subprocess.run(
+        result = ExecUtils.run(
             [SSH_SCRIPT, command],
             check=True,
             capture_output=True,

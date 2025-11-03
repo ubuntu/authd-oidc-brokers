@@ -1,5 +1,7 @@
 from robot.api.deco import keyword, library  # type: ignore
 
+import ExecUtils
+
 VM_NAME="e2e-runner"
 
 @library
@@ -12,9 +14,7 @@ class Snapshot:
         Args:
             name: The name of the snapshot to revert to.
         """
-        import subprocess
-
-        subprocess.run(
+        ExecUtils.run(
             ["virsh", "snapshot-revert", VM_NAME, name],
             check=True,
         )

@@ -2,11 +2,11 @@ import cairo
 import json
 import gi
 import os
-import time
-import subprocess
 import tempfile
 import traceback
 import sys
+
+import ExecUtils
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -426,7 +426,7 @@ def ascii_string_to_key_events(string):
 
 
 def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
-    subprocess.check_call([
+    ExecUtils.check_call([
         "ffmpeg",
         "-y",
         "-framerate", str(framerate),
