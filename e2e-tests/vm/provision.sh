@@ -265,7 +265,12 @@ fi
 # Install authd stable and create a snapshot
 $SSH "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd && \
       sudo apt-get install -y authd && \
-      sudo sed -i 's/^#verbosity:.*/verbosity: 2/g' /etc/authd/authd.yaml"
+      sudo mkdir -p /etc/systemd/system/authd.service.d && \
+      cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
+		[Service]
+		ExecStart=
+		ExecStart=/usr/libexec/authd -vv
+		EOF"
 force_create_snapshot "authd-stable-installed"
 
 install_brokers "stable"
@@ -276,7 +281,12 @@ virsh snapshot-revert "${VM_NAME}" --snapshotname "initial-setup"
 # Install authd edge and create a snapshot
 $SSH "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge && \
       sudo apt-get install -y authd && \
-      sudo sed -i 's/^#verbosity:.*/verbosity: 2/g' /etc/authd/authd.yaml"
+      sudo mkdir -p /etc/systemd/system/authd.service.d && \
+      cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
+		[Service]
+		ExecStart=
+		ExecStart=/usr/libexec/authd -vv
+		EOF"
 force_create_snapshot "authd-edge-installed"
 
 install_brokers "edge"
