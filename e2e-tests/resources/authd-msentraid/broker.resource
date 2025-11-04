@@ -76,7 +76,6 @@ Continue Log In With Remote User: Log In On External Browser
     ${user_code} =    String.Convert To Upper Case    ${user_code}
 
     Browser.Login    ${username}    %{E2E_PASSWORD}    ${user_code}    %{TOTP_SECRET}    ${OUTPUT DIR}
-    Builtin.Sleep    5
 
 
 Continue Log In With Remote User Through CLI: Define Local Password
