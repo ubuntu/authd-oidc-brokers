@@ -16,9 +16,8 @@ Log In
     Set OCR Coincidence Threshold    92
     Match Text    Not listed    300
     Hid.Keys Combo    Return
-    BuiltIn.Sleep    2
+    Match Text    Password
     Hid.Type String    ubuntu
-    BuiltIn.Sleep    2
     Hid.Keys Combo    Return
     Wait Until Desktop Ready
 
