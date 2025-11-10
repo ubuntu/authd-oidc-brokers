@@ -13,6 +13,7 @@ Options:
   -c, --client-id <id>          OIDC Client ID for broker configuration
   -u, --user <name>             Username used for authd login in the tests
   -r, --release <release>       Ubuntu release for the VM (e.g., 'questing')
+  --force                       Force provisioning: remove existing VM and artifacts and create a fresh VM
   -h, --help                    Show this help message and exit
 
 Provisions the VM for end-to-end tests
@@ -40,6 +41,10 @@ while [[ $# -gt 0 ]]; do
         -r|--release)
             RELEASE="$2"
             shift 2
+            ;;
+        --force)
+            FORCE=true
+            shift
             ;;
         -h|--help)
             usage
@@ -199,6 +204,21 @@ if [ ! -f "${SOURCE_IMAGE}" ]; then
     wget -O "${SOURCE_IMAGE}" "${IMAGE_URL}"
 else
     echo "Source image already exists: ${SOURCE_IMAGE}"
+fi
+
+if [ "${FORCE:-}" = true ]; then
+    echo "Force provisioning enabled. Removing existing VM and artifacts."
+
+    # Destroy and undefine the VM if it exists
+    if virsh dominfo "${VM_NAME}" &> /dev/null; then
+        if virsh domstate "${VM_NAME}" | grep -q '^running'; then
+            virsh destroy "${VM_NAME}"
+        fi
+        virsh undefine "${VM_NAME}" --snapshots-metadata
+    fi
+
+    # Remove artifacts of this VM
+    find "${ARTIFACTS_DIR}" -type f -name "${VM_NAME}.*" -delete
 fi
 
 # Copy and resize the image
