@@ -24,10 +24,11 @@ Prerequisites:
   - YARF must be installed via the setup_yarf.sh script
 
 Options:
-  -u, --user USERNAME          Username for the tests (can also be set via E2E_USER environment variable)
-  -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
-  -s, --totp-secret SECRET     Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
-  -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
+  -u, --user <name>            Username for the tests (can also be set via E2E_USER environment variable)
+  -p, --password <password>    Password for the tests (can also be set via E2E_PASSWORD environment variable)
+  -s, --totp-secret <secret>   Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
+  -b, --broker <broker>        Broker to test (can also be set via BROKER environment variable)
+  -r, --release <release>      Ubuntu release to test (e.g., 'questing', can also be set via RELEASE environment variable)
       --rerunfailed            Re-run only the tests that failed in the previous run
   -h, --help                   Show this help message and exit
 EOF
@@ -35,7 +36,6 @@ EOF
 
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
-VM_NAME=${VM_NAME:-"e2e-runner"}
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
 # Parse command line arguments
@@ -54,6 +54,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --broker|-b)
             BROKER="$2"
+            shift 2
+            ;;
+        --release|-r)
+            RELEASE="$2"
             shift 2
             ;;
         --totp-secret|-s)
@@ -84,11 +88,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] || [ -z "${TOTP_SECRET:-}" ]; then
-    echo >&2  "Error: E2E_USER, E2E_PASSWORD, BROKER, and TOTP_SECRET must be set either as environment variables or via command line arguments."
+if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] || [ -z "${RELEASE:-}" ] || [ -z "${TOTP_SECRET:-}" ]; then
+    echo >&2  "Error: E2E_USER, E2E_PASSWORD, BROKER, RELEASE, and TOTP_SECRET must be set either as environment variables or via command line arguments."
     usage
     exit 1
 fi
+
+VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
 if [ -z "${TESTS_TO_RUN}" ]; then
     echo "Running all tests in ${TESTS_DIR}"
@@ -148,6 +154,7 @@ E2E_USER="$E2E_USER" \
 E2E_PASSWORD="$E2E_PASSWORD" \
 TOTP_SECRET="$TOTP_SECRET" \
 BROKER="$BROKER" \
+RELEASE="$RELEASE" \
 VNC_PORT="$VNC_PORT" \
 robot \
     --loglevel DEBUG \

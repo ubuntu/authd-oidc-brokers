@@ -23,7 +23,7 @@ class SSH:
             The output of the command.
         """
         result = ExecUtils.run(
-            [SSH_SCRIPT, command],
+            [SSH_SCRIPT, "--", command],
             check=True,
             capture_output=True,
             text=True,

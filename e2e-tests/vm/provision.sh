@@ -4,32 +4,20 @@ set -euo pipefail
 
 usage(){
     cat << EOF
-Usage: $0 --ssh-public-key <file> --issuer-id <id> --client-id <id> --user <name>
-       $0 -k <file> -i <id> -c <id> -u <name>
+Usage: $0 --ssh-public-key <file> --issuer-id <id> --client-id <id> --user <name> --release <release>
+       $0 -k <file> -i <id> -c <id> -u <name> -r <release>
 
 Options:
   -k, --ssh-public-key <file>   Path to the SSH public key file to be added to the VM
   -i, --issuer-id <id>          OIDC Issuer ID for broker configuration
   -c, --client-id <id>          OIDC Client ID for broker configuration
   -u, --user <name>             Username used for authd login in the tests
+  -r, --release <release>       Ubuntu release for the VM (e.g., 'questing')
   -h, --help                    Show this help message and exit
 
 Provisions the VM for end-to-end tests
 EOF
 }
-
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template.yaml"
-LIBVIRT_XML_TEMPLATE="${SCRIPT_DIR}/e2e-runner-template.xml"
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
-ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts"
-SSH="${SCRIPT_DIR}/ssh.sh"
-
-VM_NAME="e2e-runner"
-BROKERS=("authd-msentraid")
-
-# Installing all the packages can take some time, so we set the timeout to 15 minutes
-CLOUT_INIT_TIMEOUT=900
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -47,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -u|--user)
             AUTHD_USER="$2"
+            shift 2
+            ;;
+        -r|--release)
+            RELEASE="$2"
             shift 2
             ;;
         -h|--help)
@@ -70,7 +62,8 @@ done
 if [ -z "${SSH_PUBLIC_KEY_FILE:-}" ] || \
    [ -z "${ISSUER_ID:-}" ] || \
    [ -z "${CLIENT_ID:-}" ] || \
-   [ -z "${AUTHD_USER:-}" ]; then
+   [ -z "${AUTHD_USER:-}" ] || \
+   [ -z "${RELEASE:-}" ]; then
    echo "Missing required arguments." >&2
    usage
    exit 1
@@ -86,6 +79,22 @@ if [[ "${SSH_PUBLIC_KEY_FILE}" != *.pub ]]; then
     echo "SSH public key file must have a .pub extension"
     exit 1
 fi
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
+LIBVIRT_XML_TEMPLATE="${SCRIPT_DIR}/e2e-runner-template.xml"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
+ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts"
+SSH="${SCRIPT_DIR}/ssh.sh"
+
+VM_NAME="e2e-runner-${RELEASE}"
+BROKERS=("authd-msentraid")
+
+# Installing all the packages can take some time, so we set the timeout to 15 minutes
+CLOUT_INIT_TIMEOUT=900
+
+# The RELEASE variable is used by the ssh.sh script
+export RELEASE
 
 function cloud_init_finished() {
     local image=$1
@@ -112,7 +121,7 @@ function force_create_snapshot() {
 function wait_for_system_running() {
     # shellcheck disable=SC2016
     local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
-    retry --times 30 --delay 3 -- "$SSH" "$cmd"
+    retry --times 30 --delay 3 -- "$SSH" -- "$cmd"
 }
 
 function install_brokers() {
@@ -124,7 +133,7 @@ function install_brokers() {
         local broker_config="${broker#authd-}.conf"
 
         # Install broker, configure and restart services
-        $SSH bash -euo pipefail -s <<-EOF
+        $SSH -- bash -euo pipefail -s <<-EOF
 			sudo snap install "${broker}" --channel="${channel}"
 			sudo mkdir -p /etc/authd/brokers.d
 			sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
@@ -183,8 +192,8 @@ sudo apt-get -y install \
     xvfb
 
 # Download the image
-IMAGE_URL="https://cloud-images.ubuntu.com/questing/current/questing-server-cloudimg-amd64.img"
-SOURCE_IMAGE="${CACHE_DIR}/questing-server-cloudimg-amd64.img"
+IMAGE_URL="https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-cloudimg-amd64.img"
+SOURCE_IMAGE="${CACHE_DIR}/$(basename "${IMAGE_URL}")"
 if [ ! -f "${SOURCE_IMAGE}" ]; then
     mkdir -p "${CACHE_DIR}"
     wget -O "${SOURCE_IMAGE}" "${IMAGE_URL}"
@@ -193,7 +202,7 @@ else
 fi
 
 # Copy and resize the image
-IMAGE="${ARTIFACTS_DIR}/e2e-runner.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     mkdir -p "${ARTIFACTS_DIR}"
     cp "${SOURCE_IMAGE}" "${IMAGE}"
@@ -204,7 +213,7 @@ else
 fi
 
 # Create a cloud-init ISO
-CLOUD_INIT_ISO="${ARTIFACTS_DIR}/seed.iso"
+CLOUD_INIT_ISO="${ARTIFACTS_DIR}/${VM_NAME}-seed.iso"
 if [ ! -f "${CLOUD_INIT_ISO}" ]; then
     CLOUD_INIT_DIR="$(mktemp -d)"
     trap 'rm -rf ${CLOUD_INIT_DIR}' EXIT
@@ -218,9 +227,10 @@ else
 fi
 
 # Create the libvirt XML
-LIBVIRT_XML="${ARTIFACTS_DIR}/e2e-runner.xml"
+LIBVIRT_XML="${ARTIFACTS_DIR}/${VM_NAME}.xml"
 if [ ! -f "${LIBVIRT_XML}" ]; then
     IMAGE_FILE=${IMAGE} \
+    VM_NAME=${VM_NAME} \
       envsubst < "${LIBVIRT_XML_TEMPLATE}" > "${LIBVIRT_XML}"
 else
     echo "Libvirt XML file already exists: ${LIBVIRT_XML}"
@@ -272,7 +282,7 @@ else
 fi
 
 # Install authd stable and create a snapshot
-$SSH "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd && \
+$SSH -- "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd && \
       sudo apt-get install -y authd && \
       sudo mkdir -p /etc/systemd/system/authd.service.d && \
       cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
@@ -291,7 +301,7 @@ virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-install
 virsh snapshot-revert "${VM_NAME}" --snapshotname "initial-setup"
 
 # Install authd edge and create a snapshot
-$SSH "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge && \
+$SSH -- "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge && \
       sudo apt-get install -y authd && \
       sudo mkdir -p /etc/systemd/system/authd.service.d && \
       cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
