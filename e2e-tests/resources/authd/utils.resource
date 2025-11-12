@@ -139,7 +139,8 @@ Update And Upgrade Packages
     Close Terminal In Sudo Mode
 
 Sync System Time
-    SSH.Execute    sudo systemctl restart chronyd && sudo chronyc waitsync
+    ${output} =    SSH.Execute    sudo systemctl restart chronyd && sudo chronyc waitsync
+    Log    ${output}    level=DEBUG
 
 Wait Until System Time Synced
     Wait Until Keyword Succeeds    1 min    1 sec
