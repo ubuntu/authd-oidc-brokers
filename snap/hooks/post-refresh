@@ -27,8 +27,7 @@ version_less_than() {
 }
 
 valid_semver() {
-  output=$(semver check "$1")
-  if [ "$?" -ne 0 ] && [ "${output}" != "invalid" ]; then
+  if ! output=$(semver check "$1") && [ "${output}" != "invalid" ]; then
     exit 1
   fi
   [ "${output}" = "valid" ]
