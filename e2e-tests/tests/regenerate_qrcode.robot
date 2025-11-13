@@ -31,7 +31,7 @@ Test login with CLI and QR code regeneration
     Regenerate QR Code
     Regenerate QR Code
     # Now we should be able to log in with the remote user using the latest QR code
-    Continue Log In With Remote User: Log In On External Browser   ${username}
+    Continue Log In With Remote User: Authenticate In External Browser   ${username}
     Continue Log In With Remote User Through CLI: Define Local Password   ${username}    ${local_password}
     Log Out From Terminal Session
     Close Focused Window
