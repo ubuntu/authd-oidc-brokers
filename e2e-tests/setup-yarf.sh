@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 
-YARF_REPO_URL="https://github.com/canonical/yarf"
+YARF_REPO_URL="https://github.com/adombeck/yarf"
 
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 YARF_DIR="${SCRIPT_DIR}/.yarf"
