@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+set -x
+
+usage() {
+    cat << EOF
+Usage: $0 [options] [test.robot...]
+
+Runs YARF end-to-end tests against a libvirt VM configured with the specified broker.
+For each test the script reverts the VM to a broker-specific snapshot, links
+test resources and launches the test via YARF.
+
+Required environment variables (or use the corresponding command-line options):
+  E2E_USER           The username used for authd login in the tests
+  E2E_PASSWORD       The password used for authd login in the tests
+  TOTP_SECRET        The secret used to generate OTP codes for the E2E_USER's MFA
+  BROKER             The broker to test (e.g., authd-msentraid)
+
+Prerequisites:
+  - A libvirt domain as set up by the vm/provision.sh script, with the snapshots:
+      \${BROKER}-stable-configured
+      \${BROKER}-edge-configured
+  - YARF must be installed via the setup_yarf.sh script
+
+Options:
+  -u, --user USERNAME          Username for the tests (can also be set via E2E_USER environment variable)
+  -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
+  -s, --totp-secret SECRET     Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
+  -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
+  -h, --help                   Show this help message and exit
+EOF
+}
+
+ROOT_DIR=$(dirname "$(readlink -f "$0")")
+TESTS_DIR="${ROOT_DIR}/tests"
+VM_NAME=${VM_NAME:-"e2e-runner"}
+
+# Parse command line arguments
+TESTS_TO_RUN=""
+while [[ $# -gt 0 ]]; do
+    key="$1"
+
+    case $key in
+        --user|-u)
+            E2E_USER="$2"
+            shift 2
+            ;;
+        --password|-p)
+            E2E_PASSWORD="$2"
+            shift 2
+            ;;
+        --broker|-b)
+            BROKER="$2"
+            shift 2
+            ;;
+        --totp-secret|-s)
+            TOTP_SECRET="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+        *)
+            TESTS_TO_RUN="${TESTS_TO_RUN} ${TESTS_DIR}/$(basename "${1}")"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] || [ -z "${TOTP_SECRET:-}" ]; then
+    echo "Error: E2E_USER, E2E_PASSWORD, BROKER, and TOTP_SECRET must be set either as environment variables or via command line arguments."
+    usage
+    exit 1
+fi
+
+if [ -z "${TESTS_TO_RUN}" ]; then
+    echo "Running all tests in ${TESTS_DIR}"
+    TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
+fi
+
+# Create a temporary test run directory
+TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
+mkdir -p "${TEST_RUNS_DIR}"
+TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
+ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
+cd "${TEST_RUN_DIR}"
+mkdir -p output resources
+
+# Activate YARF environment
+YARF_DIR="${ROOT_DIR}/.yarf"
+if [ ! -d "${YARF_DIR}" ]; then
+    echo "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
+    exit 1
+fi
+# shellcheck disable=SC1091 # Avoid info message about not following sourced file
+source "${YARF_DIR}/.venv/bin/activate"
+
+# Run the YARF tests
+for test_file in $TESTS_TO_RUN; do
+    test_name=$(basename "${test_file}")
+
+    ln -s "${test_file}" .
+    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/authd" resources/authd
+    # Update the symlink to the broker resources to use the specified broker
+    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/${BROKER}" resources/broker
+    # Ensure the test run directory is cleaned up on exit
+    # shellcheck disable=SC2064 # We want to capture the current value of test_name
+    trap "rm -rf ${test_name} resources" EXIT
+done
+
+E2E_USER="$E2E_USER" \
+E2E_PASSWORD="$E2E_PASSWORD" \
+TOTP_SECRET="$TOTP_SECRET" \
+BROKER="$BROKER" \
+VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
+yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
+    2> >(grep -v "<video controls style" >&2) || \
+    test_result=$?
+
+exit "${test_result:-0}"
