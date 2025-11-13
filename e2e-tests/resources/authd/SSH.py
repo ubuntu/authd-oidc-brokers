@@ -1,5 +1,6 @@
 import os.path
 
+from robot.api import logger
 from robot.api.deco import keyword, library  # type: ignore
 
 import ExecUtils
@@ -30,4 +31,16 @@ class SSH:
             timeout=timeout,
         )
 
-        return result.stdout.strip()
+        stdout = result.stdout.strip()
+        if len(stdout) == 0:
+            logger.debug(f"stdout: <empty>")
+        else:
+            logger.debug(f"stdout: {stdout}")
+
+        stderr = result.stderr.strip()
+        if len(stderr) == 0:
+            logger.debug(f"stderr: <empty>")
+        else:
+            logger.debug(f"stderr: {stderr}")
+
+        return stdout
