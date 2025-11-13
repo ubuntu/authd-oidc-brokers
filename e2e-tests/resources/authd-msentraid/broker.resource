@@ -17,15 +17,13 @@ ${ENTRAID_BROKER_CFG_DIR}    /var/snap/authd-msentraid/current/broker.conf.d
 
 *** Keywords ***
 Enable Edge Broker
-    Run Command In Terminal    sudo snap refresh authd-msentraid --edge
+    SSH.Execute    sudo snap refresh authd-msentraid --edge
 
 
 Disable Broker And Purge Config
-    Open Terminal In Sudo Mode
-    Run Command In Terminal    snap stop authd-msentraid
-    Run Command In Terminal    rm ${AUTHD_BROKER_CFG}
-    Run Command In Terminal    systemctl restart authd.service
-    Close Terminal In Sudo Mode
+    SSH.Execute    sudo snap stop authd-msentraid
+    SSH.Execute    sudo rm ${AUTHD_BROKER_CFG}
+    SSH.Execute    sudo systemctl restart authd.service
 
 
 Log In With Remote User Through CLI: QR Code
@@ -119,24 +117,22 @@ Log In With Remote User Through CLI: Local Password
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
-    Open Terminal In Sudo Mode
-    Run Command In Terminal    sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Terminal    snap restart authd-msentraid
-    Close Terminal In Sudo Mode
+    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    SSH.Execute    sudo snap restart authd-msentraid
 
 
 # Pretty much the same as the function above, but since YARF does not have support for
 # shifted characters yet, we need to do some workarounds.
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
-    Run Command In Terminal    sudo sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Terminal    sudo snap restart authd-msentraid
+    SSH.Execute    sudo sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    SSH.Execute    sudo snap restart authd-msentraid
 
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
-    Run Command In Terminal    sudo sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Terminal    sudo snap restart authd-msentraid
+    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
+    SSH.Execute    sudo snap restart authd-msentraid
 
 
 Log In With Remote User Through SSH: QR Code

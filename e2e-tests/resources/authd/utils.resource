@@ -128,10 +128,8 @@ Cancel Operation
 
 
 Update And Upgrade Packages
-    Open Terminal In Sudo Mode
-    Run Command In Terminal    apt-get update
-    Run Command In Terminal    apt-get upgrade -y    timeout=1200
-    Close Terminal In Sudo Mode
+    SSH.Execute    sudo apt-get update
+    SSH.Execute    sudo apt-get upgrade -y    timeout=1200
 
 Sync System Time
     ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart systemd-timesyncd
