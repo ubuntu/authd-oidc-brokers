@@ -28,6 +28,7 @@ Options:
   -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
   -s, --totp-secret SECRET     Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
   -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
+  -o, --output-dir DIR         Directory to store test outputs (default: temporary directory)
   -h, --help                   Show this help message and exit
 EOF
 }
@@ -38,6 +39,7 @@ VM_NAME=${VM_NAME:-"e2e-runner"}
 
 # Parse command line arguments
 TESTS_TO_RUN=""
+OUTPUT_DIR=""
 while [[ $# -gt 0 ]]; do
     key="$1"
 
@@ -56,6 +58,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --totp-secret|-s)
             TOTP_SECRET="$2"
+            shift 2
+            ;;
+        --output-dir|-o)
+            OUTPUT_DIR="$2"
             shift 2
             ;;
         -h|--help)
@@ -95,7 +101,13 @@ mkdir -p "${TEST_RUNS_DIR}"
 TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 cd "${TEST_RUN_DIR}"
-mkdir -p output resources
+
+if [ -z "${OUTPUT_DIR:-}" ]; then
+    OUTPUT_DIR=output
+    echo "No output directory specified, using current test run directory."
+fi
+
+mkdir -p "${OUTPUT_DIR}" resources
 
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
@@ -124,7 +136,7 @@ E2E_PASSWORD="$E2E_PASSWORD" \
 TOTP_SECRET="$TOTP_SECRET" \
 BROKER="$BROKER" \
 VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
+yarf --outdir "${OUTPUT_DIR}/${test_name}" --platform=Vnc . "$@" \
     2> >(grep -v "<video controls style" >&2) || \
     test_result=$?
 

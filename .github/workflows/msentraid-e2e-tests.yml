@@ -1,0 +1,123 @@
+on:
+  workflow_run:
+    workflows: ["Build and Cache Ubuntu VM"]
+    types: ["completed"]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Runs every day at midnight
+  pull_request:
+    # branches:
+    #   - main
+
+name: MSEntraID E2E tests
+jobs:
+    use-vm:
+        name: MSEntraID E2E tests
+        runs-on: ubuntu-latest
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          apt_dependencies: >-
+            bsdutils
+            clang
+            ffmpeg
+            gir1.2-webkit2-4.1
+            libcairo2-dev
+            libgirepository-2.0-dev
+            libvirt0
+            libvirt-clients
+            libvirt-clients-qemu
+            libvirt-daemon
+            libvirt-daemon-driver-qemu
+            libvirt-daemon-system
+            libxkbcommon-dev
+            qemu-kvm
+            qemu-system-x86
+            qemu-utils
+            python3-cairo
+            python3-gi
+            python3-tk
+            socat
+            xvfb
+
+        steps:
+        - name: Restore cached VM image
+          uses: actions/cache/restore@v4
+          with:
+            path: /tmp/vm/e2e-runner.img
+            key: e2e-runner-vm
+            fail-on-cache-miss: true
+
+        - name: Checkout authd-oidc-brokers repo
+          uses: actions/checkout@v5
+
+        # Even though we already try installing the dependencies in the provisioning
+        # script, we need to install them here to ensure that we can add the user
+        # to the libvirt group
+        - name: Install APT dependencies
+          run: |
+            set -eu
+            sudo apt-get update
+            sudo apt-get -y install ${{ env.apt_dependencies }}
+
+            # Add the current user to the libvirt group to be able to use libvirt
+            sudo usermod -aG libvirt,kvm $USER
+            exec newgrp libvirt
+            exec newgrp kvm
+
+        - name: Set up SSH keys for the VM provisioning
+          run: |
+            set -eu
+
+            mkdir -p ~/.ssh
+
+            echo "${{ secrets.E2E_VM_SSH_PRIV_KEY }}" > ~/.ssh/e2e_vm_key
+            chmod 600 ~/.ssh/e2e_vm_key
+
+            echo "${{ secrets.E2E_VM_SSH_PUB_KEY }}" > ~/.ssh/e2e_vm_key.pub
+            chmod 644 ~/.ssh/e2e_vm_key.pub
+
+        - name: Checkout YARF repo
+          uses: actions/checkout@v5
+          with:
+            # TODO: Update this once the changes are merged upstream
+            repository: adombeck/yarf
+            path: ./e2e-tests/.yarf
+
+        - name: Configure YARF
+          run: |
+            set -eu
+
+            ./e2e-tests/setup-yarf.sh
+
+        - name: Provision authd and authd-msentraid
+          run: |
+            set -eux
+
+            # Copy the cached VM image to the expected location
+            mkdir -p ./e2e-tests/vm/.artifacts
+
+            cp /tmp/vm/e2e-runner.img ./e2e-tests/vm/.artifacts/e2e-runner.qcow2
+
+            ./e2e-tests/vm/provision-authd.sh \
+              --ssh-public-key ~/.ssh/e2e_vm_key.pub \
+              --issuer-id "${{ secrets.E2E_MSENTRA_TENANT }}" \
+              --client-id "${{ secrets.E2E_MSENTRA_CLIENT_ID }}" \
+              --user "${{ secrets.E2E_MSENTRA_USERNAME }}"
+
+        - name: Run tests
+          run: |
+            set +eux
+
+            ./e2e-tests/run-tests.sh \
+              --user "${{ secrets.E2E_MSENTRA_USERNAME }}" \
+              --password "${{ secrets.E2E_MSENTRA_PASSWORD }}" \
+              --totp-secret "${{ secrets.E2E_MSENTRA_TOTP_SECRET }}" \
+              --broker authd-msentraid \
+              --output-dir /tmp/e2e-testrun-msentraid/output
+
+        - name: Upload test results
+          if: always()
+          uses: actions/upload-artifact@v4
+          with:
+            name: e2e-msentraid-output-${{ github.run_id }}
+            path: /tmp/e2e-testrun-msentraid/output
