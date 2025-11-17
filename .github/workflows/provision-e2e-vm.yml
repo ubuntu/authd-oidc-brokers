@@ -44,10 +44,6 @@ jobs:
           sudo apt-get update
           sudo apt-get -y install ${{ env.apt_dependencies }}
 
-          # Add the current user to the libvirt group to be able to use libvirt
-          sudo usermod -aG libvirt $USER
-          exec newgrp libvirt
-
       - name: Set up SSH keys for the VM provisioning
         run: |
           set -eu
@@ -63,7 +59,14 @@ jobs:
       - name: Provision the base E2E Ubuntu VM
         id: provision-vm
         run: |
-          set -eu
+          set -eux
+
+          # Define sudo virsh alias for the provisioning script
+          cat > ./e2e-tests/vm/.aliases <<'EOF'
+          virsh () {
+            sudo virsh "$@"
+          }
+          EOF
 
           ./e2e-tests/vm/provision-ubuntu.sh -k ~/.ssh/e2e_vm_key.pub
 

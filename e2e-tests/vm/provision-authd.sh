@@ -26,6 +26,10 @@ SSH="${SCRIPT_DIR}/ssh.sh"
 VM_NAME="e2e-runner"
 BROKERS=("authd-msentraid")
 
+if [ -f "${SCRIPT_DIR}/.aliases" ]; then
+    source "${SCRIPT_DIR}/.aliases"
+fi
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -k|--ssh-public-key)

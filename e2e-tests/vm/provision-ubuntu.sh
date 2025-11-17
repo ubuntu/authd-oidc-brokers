@@ -23,6 +23,10 @@ ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts"
 
 VM_NAME="e2e-runner"
 
+if [ -f "${SCRIPT_DIR}/.aliases" ]; then
+    source "${SCRIPT_DIR}/.aliases"
+fi
+
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
@@ -105,6 +109,7 @@ if [ ! -f "${IMAGE}" ]; then
     cp "${SOURCE_IMAGE}" "${IMAGE}"
 
     qemu-img resize "${IMAGE}" 10G
+    sudo chown libvirt-qemu:kvm "${IMAGE}"
 else
     echo "Image already exists: ${IMAGE}"
 fi
