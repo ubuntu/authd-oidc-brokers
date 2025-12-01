@@ -71,17 +71,17 @@ def main():
 
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
-    browser.web_view.load_uri("https://iam.dev.canonical.com/stg-identity-jaas-dev-hydra/oauth2/device/verify")
+    browser.web_view.load_uri("https://cd.iam.prod.canonical.com/oauth2/device/verify")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
 
-    # browser.wait_for_pattern("Enter code to allow access") #TODO adapt
+    browser.wait_for_pattern("Enter code to continue")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-code")
     browser.send_key_taps(
         ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
 
-    # browser.wait_for_pattern("Sign in", timeout_ms=20000) # TODO adapt
+    browser.wait_for_pattern("Sign in", timeout_ms=20000)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-username-and-password")
     browser.send_key_taps(
@@ -89,7 +89,7 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    # match = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)") # TODO adapt
+    match = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)") # TODO adapt
     browser.wait_for_stable_page()
     if match == "Enter code": # TODO adapt
         browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")

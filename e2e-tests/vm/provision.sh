@@ -94,7 +94,7 @@ SSH="${SCRIPT_DIR}/ssh.sh"
 
 VM_NAME_BASE="e2e-runner"
 VM_NAME="${VM_NAME_BASE}-${RELEASE}"
-BROKERS=("authd-msentraid")
+BROKERS=("authd-google")
 
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
