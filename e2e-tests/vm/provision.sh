@@ -161,7 +161,7 @@ function install_brokers() {
 		  		-e "s|<CLIENT_ID>|${CLIENT_ID}|g" \
 		  		-e "s|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = ${AUTHD_USER}|g" \
 		  		/var/snap/${broker}/current/broker.conf
-			echo 'verbosity: 2' | sudo tee /var/snap/authd-msentraid/current/${broker}.yaml
+			echo 'verbosity: 2' | sudo tee /var/snap/${broker}/current/${broker}.yaml
 			sudo systemctl restart authd.service
 			sudo snap restart "${broker}"
 		EOF
