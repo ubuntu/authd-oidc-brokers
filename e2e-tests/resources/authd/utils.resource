@@ -145,6 +145,8 @@ Update And Upgrade Packages
 Sync System Time
     ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart systemd-timesyncd
     Log    ${output}    level=DEBUG
+    ${output} =   SSH.Execute    timedatectl show -p NTPSynchronized | grep -q NTPSynchronized=yes
+    Log    ${output}    level=DEBUG
 
 
 Wait Until System Time Synced
