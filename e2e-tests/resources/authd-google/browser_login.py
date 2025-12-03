@@ -33,6 +33,7 @@ def main():
 
     parser.add_argument("username")
     parser.add_argument("password")
+    parser.add_argument("verify-url", default=None)
     parser.add_argument("device_code")
     parser.add_argument("totp_secret")
     parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
@@ -56,7 +57,7 @@ def main():
         browser.start_recording()
 
         try:
-            login(browser, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir)
+            login(browser, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir, args.verify_url)
         except TimeoutError:
             # Sometimes the page can't be loaded due to TLS errors, retry once
             if not retried_tls_error:
@@ -70,8 +71,9 @@ def main():
             browser.destroy()
 
 
-def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
-    browser.web_view.load_uri("https://cd.iam.prod.canonical.com/oauth2/device/verify")
+def login(browser, username: str, password: str, device_code: str,
+          totp_secret: str, screenshot_dir: str = ".", verify_url="https://iam.dev.canonical.com/stg-identity-jaas-dev-hydra/oauth2/device/verify"):
+    browser.web_view.load_uri(verify_url)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
 
@@ -89,19 +91,14 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    match = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)") # TODO adapt
+    browser.wait_for_pattern("Verify your identity")
     browser.wait_for_stable_page()
-    if match == "Enter code": # TODO adapt
-        browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-        browser.send_key_taps(
-            ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
-        # browser.wait_for_pattern("Are you trying to sign in") # TODO adapt
-        browser.wait_for_stable_page()
+    browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
+    browser.send_key_taps(
+        ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+    browser.wait_for_stable_page()
 
-    # browser.capture_snapshot(screenshot_dir, "device-login-confirm-signin")
-    # browser.send_key_taps([Gdk.KEY_Return])
-
-    browser.wait_for_pattern("You have signed in")
+    browser.wait_for_pattern("Sign in successful")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-success")
 
