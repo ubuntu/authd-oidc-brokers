@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-import base64
-import hashlib
-import hmac
-import os
-import struct
-import sys
-import time
+# import base64
+# import hashlib
+# import hmac
+# import os
+# import struct
+# import sys
+# import time
 
 import gi  # type: ignore
 
@@ -143,119 +143,119 @@ class BrowserWindow(Gtk.Window):
             self.send_key_tap(kt)
 
 
-class TOTPGenerator:
-    def __init__(self, otp_secret):
-        self.otp_secret = otp_secret
+# class TOTPGenerator:
+#     def __init__(self, otp_secret):
+#         self.otp_secret = otp_secret
+#
+#     def generate_totp(self) -> str:
+#         intervals_number = int(time.time()) // 30
+#         token = str(self.__get_hotp_token(self.otp_secret, intervals_no=intervals_number))
+#         # Pad token up to 6 digits
+#         while len(token) != 6:
+#             token += '0'
+#
+#         return token
+#
+#     def __get_hotp_token(self, secret, intervals_no):
+#         key = base64.b32decode(secret, True)
+#         msg = struct.pack(">Q", intervals_no)
+#         h = hmac.new(key, msg, hashlib.sha1).digest()
+#         o = o = h[19] & 15
+#         h = (struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000
+#         return h
+#
 
-    def generate_totp(self) -> str:
-        intervals_number = int(time.time()) // 30
-        token = str(self.__get_hotp_token(self.otp_secret, intervals_no=intervals_number))
-        # Pad token up to 6 digits
-        while len(token) != 6:
-            token += '0'
+# def ascii_string_to_key_events(string):
+#     if len(string) != len(string.encode()):
+#         raise TypeError(f"{string} is not an ascii string")
+#     return [ord(ch) for ch in list(string)]
+#
+#
+# def wait_for_successful_text(webview, selector="h1.p-heading--4", retries=10, delay=1.0):
+#     js = f'''
+#         (function() {{
+#             var el = document.querySelector("{selector}");
+#             return el ? el.innerText : "";
+#         }})();
+#     '''
+#
+#     for _ in range(retries):
+#         result_holder = {"text": ""}
+#
+#         def on_js_finished(webview, result, user_data):
+#             js_result = webview.evaluate_javascript_finish(result)
+#             result_holder["text"] = js_result.to_string()
+#
+#         webview.evaluate_javascript(js, -1, None, None, None, on_js_finished, None)
+#
+#         while Gtk.events_pending():
+#             Gtk.main_iteration()
+#
+#         if result_holder["text"]:
+#             return result_holder["text"]
+#
+#         time.sleep(delay)
+#
+#     return None
+#
 
-        return token
-
-    def __get_hotp_token(self, secret, intervals_no):
-        key = base64.b32decode(secret, True)
-        msg = struct.pack(">Q", intervals_no)
-        h = hmac.new(key, msg, hashlib.sha1).digest()
-        o = o = h[19] & 15
-        h = (struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000
-        return h
-
-
-def ascii_string_to_key_events(string):
-    if len(string) != len(string.encode()):
-        raise TypeError(f"{string} is not an ascii string")
-    return [ord(ch) for ch in list(string)]
-
-
-def wait_for_successful_text(webview, selector="h1.p-heading--4", retries=10, delay=1.0):
-    js = f'''
-        (function() {{
-            var el = document.querySelector("{selector}");
-            return el ? el.innerText : "";
-        }})();
-    '''
-
-    for _ in range(retries):
-        result_holder = {"text": ""}
-
-        def on_js_finished(webview, result, user_data):
-            js_result = webview.evaluate_javascript_finish(result)
-            result_holder["text"] = js_result.to_string()
-
-        webview.evaluate_javascript(js, -1, None, None, None, on_js_finished, None)
-
-        while Gtk.events_pending():
-            Gtk.main_iteration()
-
-        if result_holder["text"]:
-            return result_holder["text"]
-
-        time.sleep(delay)
-
-    return None
-
-
-def perform_login(username, password, device_code, totp_generator) -> bool:
-    Gtk.init(None)
-    browser = BrowserWindow()
-    browser.show_all()
-
-    browser.web_view.load_uri("https://iam.dev.canonical.com/stg-identity-jaas-dev-hydra/oauth2/device/verify")
-    browser.wait_for_stable_page()
-
-    browser.send_key_taps(ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
-    browser.wait_for_stable_page()
-
-    browser.send_key_taps(ascii_string_to_key_events(username) + [Gdk.KEY_Tab])
-    browser.send_key_taps(ascii_string_to_key_events(password) + [Gdk.KEY_Return])
-    browser.wait_for_stable_page()
-
-    browser.send_key_taps(ascii_string_to_key_events(totp_generator.generate_totp()) + [Gdk.KEY_Return])
-    browser.wait_for_stable_page()
-
-    text = wait_for_successful_text(browser.web_view)
-
-    if text == "Sign in successful":
-        print("Sign in successful")
-        return True
-
-    print("Sign in failed")
-    return False
-
-
-if __name__ == "__main__":
-    if os.getenv("RUN_OFFSCREEN") == "1" and "RUNNING_OFFSCREEN" not in os.environ:
-        os.execv(
-            "/usr/bin/env",
-            [
-                "/usr/bin/env",
-                "RUNNING_OFFSCREEN=1",
-                "GDK_BACKEND=x11",
-                "xvfb-run",
-                "-a",
-                sys.executable,
-            ]
-            + sys.argv,
-        )
-
-    if len(sys.argv) < 4:
-        print("Usage: BrowserWindow.py <username> <password> <code> <totp_secret>")
-        sys.exit(1)
-
-    username = sys.argv[1]
-    password = sys.argv[2]
-    device_code = sys.argv[3]
-    totp_secret = sys.argv[4]
-
-    totp_generator = TOTPGenerator(totp_secret)
-
-    successful_login = perform_login(username, password, device_code, totp_generator)
-
-    if successful_login:
-        sys.exit(0)
-
-    sys.exit(1)
+# def perform_login(username, password, device_code, totp_generator) -> bool:
+#     Gtk.init(None)
+#     browser = BrowserWindow()
+#     browser.show_all()
+#
+#     browser.web_view.load_uri("https://iam.dev.canonical.com/stg-identity-jaas-dev-hydra/oauth2/device/verify")
+#     browser.wait_for_stable_page()
+#
+#     browser.send_key_taps(ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
+#     browser.wait_for_stable_page()
+#
+#     browser.send_key_taps(ascii_string_to_key_events(username) + [Gdk.KEY_Tab])
+#     browser.send_key_taps(ascii_string_to_key_events(password) + [Gdk.KEY_Return])
+#     browser.wait_for_stable_page()
+#
+#     browser.send_key_taps(ascii_string_to_key_events(totp_generator.generate_totp()) + [Gdk.KEY_Return])
+#     browser.wait_for_stable_page()
+#
+#     text = wait_for_successful_text(browser.web_view)
+#
+#     if text == "Sign in successful":
+#         print("Sign in successful")
+#         return True
+#
+#     print("Sign in failed")
+#     return False
+#
+#
+# if __name__ == "__main__":
+#     if os.getenv("RUN_OFFSCREEN") == "1" and "RUNNING_OFFSCREEN" not in os.environ:
+#         os.execv(
+#             "/usr/bin/env",
+#             [
+#                 "/usr/bin/env",
+#                 "RUNNING_OFFSCREEN=1",
+#                 "GDK_BACKEND=x11",
+#                 "xvfb-run",
+#                 "-a",
+#                 sys.executable,
+#             ]
+#             + sys.argv,
+#         )
+#
+#     if len(sys.argv) < 4:
+#         print("Usage: BrowserWindow.py <username> <password> <code> <totp_secret>")
+#         sys.exit(1)
+#
+#     username = sys.argv[1]
+#     password = sys.argv[2]
+#     device_code = sys.argv[3]
+#     totp_secret = sys.argv[4]
+#
+#     totp_generator = TOTPGenerator(totp_secret)
+#
+#     successful_login = perform_login(username, password, device_code, totp_generator)
+#
+#     if successful_login:
+#         sys.exit(0)
+#
+#     sys.exit(1)
