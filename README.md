@@ -1,6 +1,6 @@
 # Welcome to Authd OpenID Connect Broker
 
-[actions-image]: https://github.com/ubuntu/authd-oidc-brokers/actions/workflows/ci.yaml/badge.svg
+[actions-image]: https://github.com/ubuntu/authd-oidc-brokers/actions/workflows/ci.yml/badge.svg
 [actions-url]: https://github.com/ubuntu/authd-oidc-brokers/actions?query=workflow%3ACI
 
 [license-image]: https://img.shields.io/badge/License-GPL3.0-blue.svg
