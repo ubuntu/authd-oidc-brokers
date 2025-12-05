@@ -1,4 +1,4 @@
-# Welcome to Authd OpenID Connect Broker
+# Welcome to authd OpenID Connect Broker
 
 [actions-image]: https://github.com/ubuntu/authd-oidc-brokers/actions/workflows/ci.yml/badge.svg
 [actions-url]: https://github.com/ubuntu/authd-oidc-brokers/actions?query=workflow%3ACI
@@ -20,7 +20,7 @@
 [![User Documentation][user-documentation-image]][user-documentation-url]
 [![Go Report Card][goreport-image]][goreport-url]
 
-This is the code repository for Authd OpenID Connect (OIDC) brokers. It is used in conjunction with Ubuntu authentication daemon [authd](https://github.com/ubuntu/authd).
+This is the code repository for authd OpenID Connect (OIDC) brokers. It is used in conjunction with Ubuntu authentication daemon [authd](https://github.com/ubuntu/authd).
 
 This project contains specific code for different OpenID Connect providers. We build one binary for each and snap them based on build tags to integrate with the Ubuntu authentication daemon.
 
