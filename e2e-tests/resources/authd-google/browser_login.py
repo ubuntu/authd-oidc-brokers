@@ -71,6 +71,10 @@ def main():
             browser.destroy()
 
 
+def enter_totp_code(browser, totp_secret: str):
+    browser.send_key_taps(ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+
+
 def login(browser, uri: str, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
     browser.web_view.load_uri(uri)
     browser.wait_for_stable_page()
@@ -93,11 +97,16 @@ def login(browser, uri: str, username: str, password: str, device_code: str, tot
     browser.wait_for_pattern("Verify your identity")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-    browser.send_key_taps(
-        ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+    enter_totp_code(browser, totp_secret)
     browser.wait_for_stable_page()
 
-    browser.wait_for_pattern("Sign in successful")
+    match = browser.wait_for_pattern(r"(Sign in successful|invalid authentication code)")
+    if match == "invalid authentication code":
+        # Retry once if the TOTP code was invalid
+        browser.capture_snapshot(screenshot_dir, "device-login-invalid-totp-code")
+        enter_totp_code(browser, totp_secret)
+        browser.wait_for_pattern("Sign in successful")
+
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-success")
 
