@@ -65,15 +65,15 @@ Regenerate QR Code
 Continue Log In With Remote User: Authenticate In External Browser
     [Arguments]    ${username}
     # Wait until the verification URL and login code are displayed
-    Match Text    https://cd.iam.prod.canonical.com/oauth2/device/verify
+    Match Text    %{VERIFICATION_URI}
     # Read the user code.
     ${text} =    Read Text
-    ${user_code} =    StringUtils.First Match    https://cd.iam.prod.canonical.com/oauth2/device/verify\n\s*(([A-Z0-9]+))    ${text}
+    ${user_code} =    StringUtils.First Match    %{VERIFICATION_URI}\n\s*(([A-Z0-9]+))    ${text}
     # The user code is all uppercase, but sometimes the OCR reads some letters as lowercase,
     # so convert it to uppercase to handle that.
     ${user_code} =    String.Convert To Upper Case    ${user_code}
 
-    Browser.Login    ${username}    %{E2E_PASSWORD}    ${user_code}    %{TOTP_SECRET}    ${OUTPUT DIR}
+    Browser.Login    %{VERIFICATION_URI}    ${username}    %{E2E_PASSWORD}    ${user_code}    %{TOTP_SECRET}    ${OUTPUT DIR}
 
 
 Continue Log In With Remote User Through CLI: Define Local Password

@@ -31,9 +31,9 @@ SNAPSHOT_INDEX = 0
 def main():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("uri")
     parser.add_argument("username")
     parser.add_argument("password")
-    parser.add_argument("verify-url", default=None)
     parser.add_argument("device_code")
     parser.add_argument("totp_secret")
     parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
@@ -57,7 +57,7 @@ def main():
         browser.start_recording()
 
         try:
-            login(browser, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir, args.verify_url)
+            login(browser, args.uri, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir)
         except TimeoutError:
             # Sometimes the page can't be loaded due to TLS errors, retry once
             if not retried_tls_error:
@@ -71,9 +71,8 @@ def main():
             browser.destroy()
 
 
-def login(browser, username: str, password: str, device_code: str,
-          totp_secret: str, screenshot_dir: str = ".", verify_url="https://iam.dev.canonical.com/stg-identity-jaas-dev-hydra/oauth2/device/verify"):
-    browser.web_view.load_uri(verify_url)
+def login(browser, uri: str, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
+    browser.web_view.load_uri(uri)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
 

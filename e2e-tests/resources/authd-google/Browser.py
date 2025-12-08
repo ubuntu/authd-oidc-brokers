@@ -23,13 +23,14 @@ class Browser:
     """
 
     @keyword
-    async def login(self, username: str, password: str, usercode: str, totp_secret: str, output_dir: str = "."):
+    async def login(self, url: str, username: str, password: str, usercode: str, totp_secret: str, output_dir: str = "."):
         """Perform device authentication with the given username, password and
         usercode using a browser automation script. The window opened by the
         script is run off screen using Xvfb.
         """
         command = [
             os.path.join(SCRIPT_DIR, "browser_login.py"),
+            url,
             username,
             password,
             usercode,
