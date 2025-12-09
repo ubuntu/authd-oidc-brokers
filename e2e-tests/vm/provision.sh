@@ -94,7 +94,7 @@ SSH="${SCRIPT_DIR}/ssh.sh"
 
 VM_NAME_BASE="e2e-runner"
 VM_NAME="${VM_NAME_BASE}-${RELEASE}"
-BROKERS=("authd-msentraid")
+BROKERS=("authd-google")
 
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
@@ -169,7 +169,7 @@ function install_brokers() {
 			sudo mkdir -p /etc/authd/brokers.d
 			sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
 			sudo sed -i \
-		  		-e "s|<ISSUER_ID>|${ISSUER_ID}|g" \
+		  		-e "s|issuer =.*|issuer = ${ISSUER_ID}|g" \
 		  		-e "s|<CLIENT_ID>|${CLIENT_ID}|g" \
 		  		-e "s|client_secret = <CLIENT_SECRET>|client_secret = ${CLIENT_SECRET:-}|g" \
 		  		-e "s|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = ${AUTHD_USER}|g" \
