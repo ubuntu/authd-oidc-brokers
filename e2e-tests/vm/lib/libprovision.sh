@@ -21,9 +21,14 @@ function assert_env_vars() {
     fi
 }
 
+function has_snapshot() {
+    local snapshot_name="$1"
+    virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"
+}
+
 function force_create_snapshot() {
     local snapshot_name="$1"
-    if virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"; then
+    if has_snapshot "${snapshot_name}"; then
         time virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "${snapshot_name}"
     fi
 
@@ -60,11 +65,19 @@ function wait_for_system_running() {
 }
 
 function reboot_system() {
+    shutdown_system
+    boot_system
+}
+
+function shutdown_system() {
     # For some reason, `virsh shutdown` sometimes doesn't cause the VM
     # to shut down, so we retry it a few times.
     local cmd="virsh shutdown \"${VM_NAME}\" && \
 virsh await \"${VM_NAME}\" --condition domain-inactive --timeout 5"
     retry --times 3 --delay 1 -- sh -c "$cmd"
+}
+
+function boot_system() {
     virsh start "${VM_NAME}"
     wait_for_system_running
 }

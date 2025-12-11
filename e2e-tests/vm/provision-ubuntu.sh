@@ -15,6 +15,7 @@ Usage: $0 [--config-file <file>] [--force]
 Options:
    --config-file <file>  Path to the configuration file (default: config.sh)
    --force               Force provisioning: remove existing VM and artifacts and create a fresh VM
+   --no-snapshot         Do not create a snapshot after initial setup
   -h, --help             Show this help message and exit
 
 Provisions the VM for end-to-end tests
@@ -32,6 +33,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --force)
             FORCE=true
+            shift
+            ;;
+        --no-snapshot)
+            NO_SNAPSHOT=true
             shift
             ;;
         -h|--help)
@@ -183,6 +188,12 @@ if ! cloud_init_finished "${IMAGE}"; then
 
     # Detach the cloud-init ISO
     virsh detach-disk "${VM_NAME}" vdb --config
+
+    if [ -z "${NO_SNAPSHOT:-}" ]; then
+        boot_system
+        # Create a snapshot of the initial setup
+        force_create_snapshot "initial-setup"
+    fi
 else
     echo "Cloud-init has already finished."
     restore_snapshot_and_sync_time "initial-setup"

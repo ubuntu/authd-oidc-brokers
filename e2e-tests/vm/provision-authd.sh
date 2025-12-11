@@ -82,11 +82,15 @@ if ! virsh dominfo "${VM_NAME}" &> /dev/null; then
     virsh define "${LIBVIRT_XML}"
 fi
 
-# Boot the VM and wait until it's running
-reboot_system
+# Boot the VM if not running
+if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
+    boot_system
+fi
 
-# Create a snapshot of the initial setup
-force_create_snapshot "initial-setup"
+# Create snapshot initial setup if it doesn't exist
+if ! has_snapshot "initial-setup"; then
+    force_create_snapshot "initial-setup"
+fi
 
 # Install authd stable and create a snapshot
 retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
