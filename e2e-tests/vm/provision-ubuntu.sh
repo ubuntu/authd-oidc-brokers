@@ -108,8 +108,7 @@ sudo apt-get -y install \
     libvirt-clients-qemu \
     libvirt-daemon-system \
     qemu-kvm \
-    wget \
-    xvfb
+    wget
 
 # Download the image
 IMAGE_URL="https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-cloudimg-amd64.img"
