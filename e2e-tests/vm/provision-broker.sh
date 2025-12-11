@@ -2,38 +2,24 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LIB_DIR="${SCRIPT_DIR}/lib"
+SSH="${SCRIPT_DIR}/ssh.sh"
+CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+
 usage(){
     cat << EOF
-Usage: $0 --issuer-id <id> --client-id <id> --user <name>
-       $0 -i <id> -c <id> -u <name>
+Usage: $0 --broker <name> [--config-file <file>] [--delete-snapshots]
 
 Options:
   -b, --broker <name>           Name of the broker to install (e.g., authd-msentraid)
-  -i, --issuer-id <id>          OIDC Issuer ID for broker configuration
-  -c, --client-id <id>          OIDC Client ID for broker configuration
-  -s, --client-secret <secret>  OIDC Client Secret for broker configuration
+  --config-file <file>          Path to the configuration file (default: config.sh)
   --delete-snapshots            Delete intermediate snapshots after provisioning
   -h, --help                    Show this help message and exit
 
-Provisions authd in the VM for end-to-end tests
+Provisions the specified broker in the VM for end-to-end tests
 EOF
 }
-
-if [ -z "${VM_NAME:-}" ]; then
-    echo "Missing VM_NAME environment variable. Please configure it first or run this script
-    through 'provision.sh'"
-    exit 1
-fi
-
-if [ -z "${RELEASE:-}" ]; then
-    echo "Missing RELEASE environment variable. Please configure it first or run this script
-    through 'provision.sh'"
-    exit 1
-fi
-
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
-SSH="${SCRIPT_DIR}/ssh.sh"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -41,16 +27,8 @@ while [[ $# -gt 0 ]]; do
             BROKER="$2"
             shift 2
             ;;
-        -i|--issuer-id)
-            ISSUER_ID="$2"
-            shift 2
-            ;;
-        -c|--client-id)
-            CLIENT_ID="$2"
-            shift 2
-            ;;
-        -s|--client-secret)
-            CLIENT_SECRET="$2"
+        --config-file)
+            CONFIG_FILE="$2"
             shift 2
             ;;
         --delete-snapshots)
@@ -60,10 +38,6 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
-            ;;
-        --)
-            shift
-            break
             ;;
         -*)
             echo >&2 "Unknown option: $1"
@@ -75,21 +49,40 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${BROKER:-}" ] || \
-   { [ -z "${ISSUER_ID:-}" ] && [ -z "${CLIENT_SECRET:-}" ]; } || \
-   [ -z "${CLIENT_ID:-}" ]; then
-   echo "Missing required arguments." >&2
-   usage
-   exit 1
+# shellcheck source=config.sh disable=SC1091
+source "${CONFIG_FILE}"
+
+if [ -z "${BROKER:-}" ]; then
+    echo "Broker name is required. Use --broker <name> to specify it."
+    exit 1
 fi
 
-# shellcheck source=lib/libprovision.sh disable=SC1091
+# shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
+
+assert_env_vars VM_NAME_BASE RELEASE
+
+ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
+
+if [ -z "${VM_NAME:-}" ]; then
+    VM_NAME="${VM_NAME_BASE}-${RELEASE}"
+fi
 
 function install_broker() {
     local channel="$1"
     local base_snapshot="authd-${channel}-installed"
     local broker_config="${BROKER#authd-}.conf"
+
+    # Get the issuer ID from the environment variable corresponding to the broker.
+    # For example, for broker "authd-msentraid", we use "AUTHD_MSENTRAID_ISSUER_ID".
+    local broker_prefix="${BROKER^^}"
+    broker_prefix="${broker_prefix//-/_}"
+    local issuer_id_var="${broker_prefix}_ISSUER_ID"
+    local issuer_id="${!issuer_id_var}"
+    local client_id_var="${broker_prefix}_CLIENT_ID"
+    local client_id="${!client_id_var}"
+    local client_secret_var="${broker_prefix}_CLIENT_SECRET"
+    local client_secret="${!client_secret_var:-}"
 
     virsh snapshot-revert "${VM_NAME}" --snapshotname "${base_snapshot}"
 
@@ -99,9 +92,9 @@ function install_broker() {
         sudo mkdir -p /etc/authd/brokers.d
         sudo cp /snap/${BROKER}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
         sudo sed -i \
-            -e "s|<ISSUER_ID>|${ISSUER_ID}|g" \
-            -e "s|<CLIENT_ID>|${CLIENT_ID}|g" \
-			-e "s|<CLIENT_SECRET>|${CLIENT_SECRET}|g" \
+            -e "s|<ISSUER_ID>|${issuer_id}|g" \
+            -e "s|<CLIENT_ID>|${client_id}|g" \
+			-e "s|<CLIENT_SECRET>|${client_secret}|g" \
             /var/snap/${BROKER}/current/broker.conf
         echo 'verbosity: 2' | sudo tee /var/snap/${BROKER}/current/${BROKER}.yaml
         sudo systemctl restart authd.service

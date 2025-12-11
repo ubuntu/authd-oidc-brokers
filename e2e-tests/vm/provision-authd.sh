@@ -2,43 +2,32 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LIB_DIR="${SCRIPT_DIR}/lib"
+SSH="${SCRIPT_DIR}/ssh.sh"
+CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+
 usage(){
     cat << EOF
-Usage: $0
+Usage: $0 [--config-file <file>]
 
 Options:
-  -h, --help                    Show this help message and exit
+   --config-file <file>  Path to the configuration file (default: config.sh)
+  -h, --help             Show this help message and exit
 
 Provisions authd in the VM for end-to-end tests
 EOF
 }
 
-if [ -z "${VM_NAME:-}" ]; then
-    echo "Missing VM_NAME environment variable. Please configure it first or run this script
-    through 'provision.sh'"
-    exit 1
-fi
-
-if [ -z "${RELEASE:-}" ]; then
-    echo "Missing RELEASE environment variable. Please configure it first or run this script
-    through 'provision.sh'"
-    exit 1
-fi
-
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-LIB_DIR="${SCRIPT_DIR}/lib"
-ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
-SSH="${SCRIPT_DIR}/ssh.sh"
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --config-file)
+            CONFIG_FILE="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
-            ;;
-        --)
-            shift
-            break
             ;;
         -*)
             echo >&2 "Unknown option: $1"
@@ -49,6 +38,25 @@ while [[ $# -gt 0 ]]; do
             exit 1
     esac
 done
+
+if [ ! -f "${CONFIG_FILE}" ]; then
+    echo "Configuration file '${CONFIG_FILE}' not found." >&2
+    exit 1
+fi
+
+# shellcheck source=config.sh disable=SC1091
+source "${CONFIG_FILE}"
+
+# shellcheck source=lib/libprovision.sh
+source "${LIB_DIR}/libprovision.sh"
+
+assert_env_vars RELEASE VM_NAME_BASE
+
+ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
+
+if [ -z "${VM_NAME:-}" ]; then
+    VM_NAME="${VM_NAME_BASE}-${RELEASE}"
+fi
 
 # Print executed commands to ease debugging
 set -x
@@ -66,7 +74,7 @@ if [ ! -f "${LIBVIRT_XML}" ]; then
     exit 1
 fi
 
-# shellcheck source=lib/libprovision.sh disable=SC1091
+# shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
 # Define the VM

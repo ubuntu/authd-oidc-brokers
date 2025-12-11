@@ -2,29 +2,32 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LIB_DIR="${SCRIPT_DIR}/lib"
+SSH="${SCRIPT_DIR}/ssh.sh"
+LIBVIRT_XML_TEMPLATE="${SCRIPT_DIR}/e2e-runner-template.xml"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
+
 usage(){
     cat << EOF
-Usage: $0 --ssh-public-key <file>
-       $0 -k <file>
+Usage: $0 [--config-file <file>] [--force]
 
 Options:
-  -k, --ssh-public-key <file>   Path to the SSH public key file to be added to the VM
-  -r, --release <release>       Ubuntu release for the VM (e.g., 'questing')
-  --force                       Force provisioning: remove existing VM and artifacts and create a fresh VM
-  -h, --help                    Show this help message and exit
+   --config-file <file>  Path to the configuration file (default: config.sh)
+   --force               Force provisioning: remove existing VM and artifacts and create a fresh VM
+  -h, --help             Show this help message and exit
 
 Provisions the VM for end-to-end tests
 EOF
 }
 
+# Default values
+CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -k|--ssh-public-key)
-            SSH_PUBLIC_KEY_FILE="$2"
-            shift 2
-            ;;
-        -r|--release)
-            RELEASE="$2"
+        --config-file)
+            CONFIG_FILE="$2"
             shift 2
             ;;
         --force)
@@ -34,10 +37,6 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
-            ;;
-        --)
-            shift
-            break
             ;;
         -*)
             echo >&2 "Unknown option: $1"
@@ -49,11 +48,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${SSH_PUBLIC_KEY_FILE:-}" ] || [ -z "${RELEASE:-}" ]; then
-   echo "Missing required argument." >&2
-   usage
-   exit 1
+if [ ! -f "${CONFIG_FILE}" ]; then
+    echo "Configuration file '${CONFIG_FILE}' not found." >&2
+    exit 1
 fi
+
+# shellcheck source=config.sh disable=SC1091
+source "${CONFIG_FILE}"
+
+# shellcheck source=lib/libprovision.sh
+source "${LIB_DIR}/libprovision.sh"
+
+assert_env_vars RELEASE VM_NAME_BASE SSH_PUBLIC_KEY_FILE
 
 # Validate SSH public key file
 if [ ! -f "${SSH_PUBLIC_KEY_FILE}" ]; then
@@ -69,29 +75,12 @@ fi
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-LIB_DIR="${SCRIPT_DIR}/lib"
-CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
-LIBVIRT_XML_TEMPLATE="${SCRIPT_DIR}/e2e-runner-template.xml"
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
 ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
-SSH="${SCRIPT_DIR}/ssh.sh"
-
-
-if [ -z "${VM_NAME_BASE:-}" ]; then
-    VM_NAME_BASE="e2e-runner"
-fi
+CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 fi
-
-
-# The RELEASE variable is used by the ssh.sh script
-export RELEASE
-
-# shellcheck source=lib/libprovision.sh disable=SC1091
-source "${LIB_DIR}/libprovision.sh"
 
 function cloud_init_finished() {
     local image=$1

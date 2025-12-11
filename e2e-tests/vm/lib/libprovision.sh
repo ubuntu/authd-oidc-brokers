@@ -1,5 +1,26 @@
 #!/bin/bash
 
+function assert_env_vars() {
+    local missing=()
+    if [ "$#" -eq 0 ]; then
+        return
+    fi
+
+    for var in "$@"; do
+        # treat unset or empty as missing
+        if [ -z "${!var:-}" ]; then
+            missing+=("$var")
+        fi
+    done
+
+    if [ "${#missing[@]}" -ne 0 ]; then
+        printf 'Missing required env vars: %s\n' "${missing[*]}" >&2
+        printf 'Create a config file from the template at e2e-tests/vm/config.sh.template\n' >&2
+        printf 'or set the missing variables in the environment.\n' >&2
+        exit 1
+    fi
+}
+
 function force_create_snapshot() {
     local snapshot_name="$1"
     if virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"; then
