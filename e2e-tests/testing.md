@@ -18,39 +18,39 @@ The tests have mainly two sets of dependencies: one required to configure and ru
 - Virtualization dependencies:
 
     ```text
+    cloud-image-utils
     libvirt-clients-qemu
     libvirt-daemon-system
     qemu-kvm
     socat
     wget
-    cloud-image-utils
     ```
 
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt install libvirt-clients-qemu libvirt-daemon-system qemu-kvm socat wget cloud-image-utils
+    sudo apt install cloud-image-utils libvirt-clients-qemu libvirt-daemon-system qemu-kvm socat wget
     ```
 
 - Test-run dependencies:
 
     ```text
     clang
+    ffmpeg
+    gir1.2-webkit2-4.1
     libxkbcommon-dev
     libcairo2-dev
     libgirepository-2.0-dev
     python3-tk
     python3-gi
     python3-cairo
-    xvfb
-    ffmpeg
-    gir1.2-webkit2-4.1
+    xvfb    
     ```
 
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt install clang libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb ffmpeg gir1.2-webkit2-4.1
+    sudo apt install clang ffmpeg gir1.2-webkit2-4.1 libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb
     ```
 
 ### 2. Setup the VM
