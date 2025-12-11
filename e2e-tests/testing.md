@@ -35,7 +35,6 @@ The tests have mainly two sets of dependencies: one required to configure and ru
 - Test-run dependencies:
 
     ```text
-    clang
     ffmpeg
     gir1.2-webkit2-4.1
     libxkbcommon-dev
@@ -50,7 +49,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt install clang ffmpeg gir1.2-webkit2-4.1 libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb
+    sudo apt install ffmpeg gir1.2-webkit2-4.1 libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb
     ```
 
 ### 2. Setup the VM

@@ -56,7 +56,6 @@ set -x
 # Install required packages
 sudo apt-get -y install \
     bsdutils \
-    clang \
     ffmpeg \
     gir1.2-webkit2-4.1 \
     libcairo2-dev \
