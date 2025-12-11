@@ -61,16 +61,10 @@ sudo apt-get -y install \
     gir1.2-webkit2-4.1 \
     libcairo2-dev \
     libgirepository-2.0-dev \
-    libvirt0 \
-    libvirt-clients \
     libvirt-clients-qemu \
-    libvirt-daemon \
-    libvirt-daemon-driver-qemu \
     libvirt-daemon-system \
     libxkbcommon-dev \
     qemu-kvm \
-    qemu-system-x86 \
-    qemu-utils \
     python3-cairo \
     python3-gi \
     python3-tk \

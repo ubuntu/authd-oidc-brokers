@@ -105,15 +105,9 @@ set -x
 sudo apt-get -y install \
     bsdutils \
     cloud-image-utils \
-    libvirt0 \
-    libvirt-clients \
     libvirt-clients-qemu \
-    libvirt-daemon \
-    libvirt-daemon-driver-qemu \
     libvirt-daemon-system \
     qemu-kvm \
-    qemu-system-x86 \
-    qemu-utils \
     wget \
     xvfb
 
