@@ -83,40 +83,8 @@ if [ -z "${BROKER:-}" ] || \
    exit 1
 fi
 
-function force_create_snapshot() {
-    local snapshot_name="$1"
-    if virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"; then
-        time virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "${snapshot_name}"
-    fi
-
-    if virsh domstate "${VM_NAME}" | grep -q '^running'; then
-        # If the VM is running, we have to use --memspec to create the snapshot
-        local memfile="${IMAGE%.qcow2}-${snapshot_name}.mem"
-        time virsh snapshot-create-as --domain "${VM_NAME}" --name "${snapshot_name}" \
-          --memspec "${memfile},snapshot=external"
-        return
-    fi
-
-    time virsh snapshot-create-as --domain "${VM_NAME}" --name "${snapshot_name}" --disk-only
-}
-
-function wait_for_system_running() {
-    # Wait until we can connect via SSH
-    retry --times 30 --delay 3 -- "$SSH" -- true
-    # shellcheck disable=SC2016
-    local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
-    retry --times 3 --delay 3 -- timeout 30 -- "$SSH" -- "$cmd"
-}
-
-function reboot_system() {
-    # For some reason, `virsh shutdown` sometimes doesn't cause the VM
-    # to shut down, so we retry it a few times.
-    local cmd="virsh shutdown \"${VM_NAME}\" && \
-virsh await \"${VM_NAME}\" --condition domain-inactive --timeout 5"
-    retry --times 3 --delay 1 -- sh -c "$cmd"
-    virsh start "${VM_NAME}"
-    wait_for_system_running
-}
+# shellcheck source=lib/libprovision.sh disable=SC1091
+source "${LIB_DIR}/libprovision.sh"
 
 function install_broker() {
     local channel="$1"
