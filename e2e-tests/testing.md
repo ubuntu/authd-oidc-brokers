@@ -28,7 +28,6 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     qemu-utils
     qemu-kvm
     socat
-    sshpass
     wget
     cloud-image-utils
     ```
@@ -36,7 +35,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt install libvirt0 libvirt-clients libvirt-clients-qemu libvirt-daemon libvirt-daemon-system libvirt-daemon-driver-qemu qemu-system-x86 qemu-utils qemu-kvm socat sshpass wget cloud-image-utils
+    sudo apt install libvirt0 libvirt-clients libvirt-clients-qemu libvirt-daemon libvirt-daemon-system libvirt-daemon-driver-qemu qemu-system-x86 qemu-utils qemu-kvm socat wget cloud-image-utils
     ```
 
 - Test-run dependencies:

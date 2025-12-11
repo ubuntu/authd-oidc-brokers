@@ -114,7 +114,6 @@ sudo apt-get -y install \
     qemu-kvm \
     qemu-system-x86 \
     qemu-utils \
-    sshpass \
     wget \
     xvfb
 
