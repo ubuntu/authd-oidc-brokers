@@ -76,7 +76,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "${BROKER:-}" ] || \
-   ([ -z "${ISSUER_ID:-}" ] && [ -z "${CLIENT_SECRET:-}" ]) || \
+   { [ -z "${ISSUER_ID:-}" ] && [ -z "${CLIENT_SECRET:-}" ]; } || \
    [ -z "${CLIENT_ID:-}" ]; then
    echo "Missing required arguments." >&2
    usage
