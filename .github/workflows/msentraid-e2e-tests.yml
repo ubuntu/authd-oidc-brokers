@@ -26,6 +26,7 @@ jobs:
             libvirt-daemon-system
             qemu-kvm
             retry
+            socat
             wget
 
         steps:
