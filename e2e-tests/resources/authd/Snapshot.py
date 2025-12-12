@@ -24,6 +24,6 @@ class Snapshot:
             name: The name of the snapshot to revert to.
         """
         ExecUtils.run(
-            ["virsh", "snapshot-revert", vm_name(), name],
+            ["sudo virsh", "snapshot-revert", vm_name(), name],
             check=True,
         )
