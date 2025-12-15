@@ -10,7 +10,7 @@ jobs:
         name: TIOBE TICS Framework
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@v6
             - uses: actions/setup-go@v6
               with:
                 go-version-file: go.mod
@@ -27,7 +27,7 @@ jobs:
                 echo "LAST_QA_ID=$(gh run list --workflow 'QA & sanity checks' --limit 1 --status success --json databaseId -b main | jq '.[].databaseId')" >> $GITHUB_ENV
 
             - name: Download coverage artifact
-              uses: actions/download-artifact@v6
+              uses: actions/download-artifact@v7
               with:
                 github-token: ${{ github.token }}
                 path: .artifacts/
