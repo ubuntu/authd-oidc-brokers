@@ -20,4 +20,4 @@ class VideoLogger:
                 data = f.read()
             b64 = base64.b64encode(data).decode('utf-8')
             html = f'<video controls style="max-width: 50%" src="data:video/webm;base64,{b64}" />'
-            logger.error(f'{description}\n{html}', html=True)
+            logger.error(f'{description}\n{html}', html=True, console=False)
