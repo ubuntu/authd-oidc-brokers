@@ -90,7 +90,7 @@ sudo -v
 CLOUT_INIT_TIMEOUT=900
 
 ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
-CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
+CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init/${RELEASE}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"

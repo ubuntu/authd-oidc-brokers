@@ -19,32 +19,29 @@ chpasswd:
 package_update: true
 package_upgrade: true
 packages:
+  # Packages for a minimal Ubuntu desktop environment
   - fonts-ubuntu
   - gdm3
   - gnome-shell
   - gnome-shell-extension-ubuntu-dock
   - gsettings-ubuntu-schemas
-  - openssh-server
   - policykit-desktop-privileges
-  # Default terminal on questing
   - ptyxis
-  - spice-vdagent
-  # Required for add-apt-repository
-  - software-properties-common
-  - systemd-container
-  - systemd-timesyncd
   - ubuntu-settings
   - yaru-theme-gtk
   - yaru-theme-icon
+  # To enable SSH access
+  - openssh-server
+  # To forward SSH over VSOCK
+  - socat
+  # For shared clipboard (useful for debugging)
+  - spice-vdagent
+  # To sync the system time after restoring snapshots
+  - systemd-timesyncd
 
 write_files:
-  - path: /etc/dconf/profile/user
-    content: |
-      user-db:user
-      system-db:local
-
   # Configure dconf
-  - path: /etc/dconf/db/local.d/00-e2e-tests-requirements
+  - path: /etc/dconf/db/local.d/00-e2e-tests
     content: |
       # Disable automatic suspend when plugged in
       [org/gnome/settings-daemon/plugins/power]
@@ -59,28 +56,23 @@ write_files:
       [org/gnome/desktop/interface]
       text-scaling-factor=1.25
 
-  - path: /etc/ssh/sshd_config.d/authd.conf
-    content: |
-      UsePAM yes
-      Match User *@*
-          KbdInteractiveAuthentication yes
-
-    # Export the journal via VSOCK
+  # Export the journal via VSOCK
   - path: /etc/systemd/journald.conf.d/00-forward-to-vsock.conf
     content: |
       [Journal]
       ForwardToSocket=vsock:2:52000
 
 runcmd:
-  # Disable apport
-  - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
-  - systemctl mask --now apport.service
-  # Increase the default login timeout
-  - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
   # Update dconf database
   - dconf update
+  # Disable Apport to avoid popups which interfere with tests
+  - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
+  - systemctl mask --now apport.service
   # Disable systemd-networkd-wait-online to speed up boot time
   - sudo systemctl mask systemd-networkd-wait-online.service
+  # Enable our systemd services
+  - sudo systemctl enable sshd-vsock.service
+  - sudo systemctl enable journal-vsock-export.service
   # Avoid APT downloads and upgrades during the tests
   - sudo systemctl mask apt-daily.service
   - sudo systemctl mask apt-daily.timer

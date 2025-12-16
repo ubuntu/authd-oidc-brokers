@@ -1,0 +1,13 @@
+#cloud-config
+packages:
+  # Required for add-apt-repository
+  - software-properties-common
+  # Required for machinectl
+  - systemd-container
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/authd.conf
+    content: |
+      UsePAM yes
+      Match User *@*
+          KbdInteractiveAuthentication yes
