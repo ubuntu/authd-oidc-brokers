@@ -217,21 +217,21 @@ func (b *Broker) connectToOIDCServer(ctx context.Context) (*oidc.Provider, error
 }
 
 // GetAuthenticationModes returns the authentication modes available for the user.
-func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authModesWithLabels []map[string]string, err error) {
+func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authModesWithLabels []map[string]string, msg string, err error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	availableModes, err := b.availableAuthModes(session)
+	availableModes, msg, err := b.availableAuthModes(session)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Store the available auth modes, so that we can check in SelectAuthenticationMode if the selected mode is valid.
 	session.authModes = availableModes
 	if err := b.updateSession(sessionID, session); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	modesSupportedByUI := b.authModesSupportedByUI(supportedUILayouts)
@@ -248,16 +248,20 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	}
 
 	if len(authModesWithLabels) == 0 {
-		return nil, fmt.Errorf("no authentication modes available for user %q", session.username)
+		return nil, "", fmt.Errorf("no authentication modes available for user %q", session.username)
 	}
 
-	return authModesWithLabels, nil
+	return authModesWithLabels, msg, nil
 }
 
-func (b *Broker) availableAuthModes(session session) (availableModes []string, err error) {
+func (b *Broker) availableAuthModes(session session) (availableModes []string, msg string, err error) {
 	if len(session.nextAuthModes) > 0 {
 		for _, mode := range session.nextAuthModes {
-			if !b.authModeIsAvailable(session, mode) {
+			isAvailable, modeMsg := b.authModeIsAvailable(session, mode)
+			if modeMsg != "" {
+				msg = modeMsg
+			}
+			if !isAvailable {
 				continue
 			}
 			availableModes = append(availableModes, mode)
@@ -265,16 +269,16 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 		if availableModes == nil {
 			log.Warningf(context.Background(), "None of the next auth modes are available: %v", session.nextAuthModes)
 		}
-		return availableModes, nil
+		return availableModes, msg, nil
 	}
 
 	switch session.mode {
 	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
 		// Session is for changing the password.
 		if !passwordFileExists(session) {
-			return nil, errors.New("password file does not exist, cannot change password")
+			return nil, "", errors.New("password file does not exist, cannot change password")
 		}
-		return []string{authmodes.Password}, nil
+		return []string{authmodes.Password}, "", nil
 
 	default:
 		// Session is for login. Check which auth modes are available.
@@ -283,83 +287,87 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 		// when it's not necessary.
 		modes := append([]string{authmodes.Password}, b.provider.SupportedOIDCAuthModes()...)
 		for _, mode := range modes {
-			if b.authModeIsAvailable(session, mode) {
+			isAvailable, modeMsg := b.authModeIsAvailable(session, mode)
+			if modeMsg != "" {
+				msg = modeMsg
+			}
+			if isAvailable {
 				availableModes = append(availableModes, mode)
 			}
 		}
-		return availableModes, nil
+		return availableModes, msg, nil
 	}
 }
 
-func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
+func (b *Broker) authModeIsAvailable(session session, authMode string) (bool, string) {
 	switch authMode {
 	case authmodes.Password:
 		if !tokenExists(session) {
 			log.Debugf(context.Background(), "Token does not exist for user %q, so local password authentication is not available", session.username)
-			return false
+			return false, ""
 		}
 
 		if !passwordFileExists(session) {
 			log.Debugf(context.Background(), "Password file does not exist for user %q, so local password authentication is not available", session.username)
-			return false
+			return false, ""
 		}
 
 		authInfo, err := token.LoadAuthInfo(session.tokenPath)
 		if err != nil {
 			log.Warningf(context.Background(), "Could not load token, so local password authentication is not available: %v", err)
-			return false
+			return false, ""
 		}
 
 		if !b.provider.SupportsDeviceRegistration() {
 			// If the provider does not support device registration,
 			// we can always use the token for local password authentication.
 			log.Debugf(context.Background(), "Provider does not support device registration, so local password authentication is available for user %q", session.username)
-			return true
+			return true, ""
 		}
 
 		if session.isOffline {
 			// If the session is in offline mode, we can't register the device anyway,
 			// so we can allow the user to use local password authentication.
 			log.Debugf(context.Background(), "Session is in offline mode, so local password authentication is available for user %q", session.username)
-			return true
+			return true, ""
 		}
 
 		isTokenForDeviceRegistration, err := b.provider.IsTokenForDeviceRegistration(authInfo.Token)
 		if err != nil {
 			log.Warningf(context.Background(), "Could not check if token is for device registration, so local password authentication is not available: %v", err)
-			return false
+			return false, ""
 		}
 
 		if b.cfg.registerDevice && !isTokenForDeviceRegistration {
 			// TODO: We might want to display a message to the user in this case
 			log.Noticef(context.Background(), "Token exists for user %q, but it cannot be used for device registration, so local password authentication is not available", session.username)
-			return false
+			return false, "Device authentication is required: device registration setting has changed since last login"
 		}
 		if !b.cfg.registerDevice && isTokenForDeviceRegistration {
 			// TODO: We might want to display a message to the user in this case
 			log.Noticef(context.Background(), "Token exists for user %q, but it requires device registration, so local password authentication is not available", session.username)
-			return false
+			return false, "Device authentication is required: device registration setting has changed since last login"
 		}
 
-		return true
+		return true, ""
 	case authmodes.NewPassword:
-		return true
+		return true, ""
 	case authmodes.Device, authmodes.DeviceQr:
 		if session.oidcServer == nil {
 			log.Debugf(context.Background(), "OIDC server is not initialized, so device authentication is not available")
-			return false
+			return false, ""
 		}
 		if session.oidcServer.Endpoint().DeviceAuthURL == "" {
 			log.Debugf(context.Background(), "OIDC server does not support device authentication, so device authentication is not available")
-			return false
+			return false, ""
 		}
 		if session.isOffline {
 			log.Noticef(context.Background(), "Session is in offline mode, so device authentication is not available")
-			return false
+			return false, ""
 		}
-		return true
+		return true, ""
 	}
-	return false
+	return false, ""
 }
 
 func tokenExists(session session) bool {

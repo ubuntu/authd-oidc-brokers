@@ -393,7 +393,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 				layouts = append(layouts, supportedUILayouts[layout])
 			}
 
-			modes, err := b.GetAuthenticationModes(sessionID, layouts)
+			modes, _, err := b.GetAuthenticationModes(sessionID, layouts)
 			if tc.wantErr {
 				require.Error(t, err, "GetAuthenticationModes should have returned an error")
 				return
@@ -506,7 +506,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 
 			// We need to do a GAM call first to get all the modes.
-			_, err := b.GetAuthenticationModes(sessionID, tc.supportedLayouts)
+			_, _, err := b.GetAuthenticationModes(sessionID, tc.supportedLayouts)
 			require.NoError(t, err, "Setup: GetAuthenticationModes should not have returned an error")
 
 			got, err := b.SelectAuthenticationMode(sessionID, tc.modeName)
