@@ -8,7 +8,7 @@ from robot.libraries.BuiltIn import BuiltIn
 import ExecUtils
 
 HOST_CID = 2 # 2 always refers to the host
-PORT = 52000
+PORT = 55000
 
 @library
 class Journal:
