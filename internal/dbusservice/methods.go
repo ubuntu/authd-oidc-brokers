@@ -23,12 +23,23 @@ func (s *Service) NewSession(username, lang, mode string) (sessionID, encryption
 // GetAuthenticationModes is the method through which the broker and the daemon will communicate once dbusInterface.GetAuthenticationModes is called.
 func (s *Service) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Getting authentication modes for session %s", sessionID)
-	authenticationModes, err := s.broker.GetAuthenticationModes(sessionID, supportedUILayouts)
+	authenticationModes, _, err := s.broker.GetAuthenticationModes(sessionID, supportedUILayouts)
 	if err != nil {
 		return nil, dbus.MakeFailedError(err)
 	}
 	log.Debugf(context.Background(), "Got authentication modes for session %s: %v", sessionID, authenticationModes)
 	return authenticationModes, nil
+}
+
+// GetAuthenticationModesV2 is the method through which the broker and the daemon will communicate once dbusInterface.GetAuthenticationModes is called.
+func (s *Service) GetAuthenticationModesV2(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, msg string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Getting authentication modes for session %s", sessionID)
+	authenticationModes, msg, err := s.broker.GetAuthenticationModes(sessionID, supportedUILayouts)
+	if err != nil {
+		return nil, "", dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "GetAuthenticationModesV2: modes=%v, msg=%s", authenticationModes, msg)
+	return authenticationModes, msg, nil
 }
 
 // SelectAuthenticationMode is the method through which the broker and the daemon will communicate once dbusInterface.SelectAuthenticationMode is called.
