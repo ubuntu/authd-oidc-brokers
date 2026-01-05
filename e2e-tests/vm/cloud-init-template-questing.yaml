@@ -69,7 +69,7 @@ write_files:
   - path: /etc/systemd/journald.conf.d/00-forward-to-vsock.conf
     content: |
       [Journal]
-      ForwardToSocket=vsock:2:52000
+      ForwardToSocket=vsock:2:55000
 
 runcmd:
   # Disable apport
