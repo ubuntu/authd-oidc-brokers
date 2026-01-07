@@ -62,7 +62,7 @@ assert_env_vars RELEASE VM_NAME_BASE BROKERS
 
 IFS=',' read -r -a BROKER_ARRAY <<< "${BROKERS}"
 
-ARTIFACTS_DIR="${ARTIFACTS_DIR:-${SCRIPT_DIR}/.artifacts/${RELEASE}}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${SCRIPT_DIR}/.artifacts}/${RELEASE}"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
@@ -162,10 +162,10 @@ else
 fi
 
 # Install authd stable and create a snapshot
-retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+retry --times 3 --delay 1 -- timeout 30 "$SSH" -- \
   "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd"
 
-timeout 600 -- \
+timeout 600 \
     "$SSH" -- \
     'sudo apt-get install -y authd && \
      sudo mkdir -p /etc/systemd/system/authd.service.d && \
@@ -186,10 +186,10 @@ sudo virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-in
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
 # Install authd edge and create a snapshot
-retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+retry --times 3 --delay 1 -- timeout 30 "$SSH" -- \
   "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge"
 
-timeout 600 -- \
+timeout 600 \
     "$SSH" -- \
     'sudo apt-get install -y authd && \
      sudo mkdir -p /etc/systemd/system/authd.service.d && \

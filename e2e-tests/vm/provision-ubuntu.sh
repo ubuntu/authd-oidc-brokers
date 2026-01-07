@@ -89,7 +89,7 @@ sudo -v
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
-ARTIFACTS_DIR="${ARTIFACTS_DIR:-${SCRIPT_DIR}/.artifacts/${RELEASE}}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${SCRIPT_DIR}/.artifacts}/${RELEASE}"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
@@ -130,7 +130,7 @@ if [ "${FORCE:-}" = true ]; then
 fi
 
 # Copy and resize the image
-IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     mkdir -p "${ARTIFACTS_DIR}"
     cp "${SOURCE_IMAGE}" "${IMAGE}"
@@ -193,9 +193,8 @@ if ! cloud_init_finished "${IMAGE}"; then
     script -q -e -f /dev/null -c "sudo virsh console $VM_NAME" &
     VM_CONSOLE_PID=$!
 
-    while ! $(sudo virsh domstate "${VM_NAME}" | grep -q '^shut off'); do
-        sleep 5
-    done
+    timeout "${CLOUT_INIT_TIMEOUT}" retry --delay 1 -- \
+      sh -c "sudo virsh domstate \"${VM_NAME}\" | grep -q '^shut off'"
 
     kill "${VM_CONSOLE_PID}" || true
 
