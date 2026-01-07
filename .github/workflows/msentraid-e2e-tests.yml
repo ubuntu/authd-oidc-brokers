@@ -33,7 +33,7 @@ jobs:
         - name: Restore cached VM image
           uses: actions/cache/restore@v4
           with:
-            path: /tmp/vm/e2e-runner.img
+            path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ env.RELEASE }}.qcow2
             key: e2e-runner-vm
             fail-on-cache-miss: true
 
@@ -85,9 +85,6 @@ jobs:
 
             # Set up temporary directory for VM artifacts
             mkdir -p ${{ env.ARTIFACTS_DIR }}
-
-            # Copy the cached VM image to the expected location
-            cp /tmp/vm/e2e-runner.img ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ env.RELEASE }}.qcow2
 
             cat << EOF > ./e2e-tests/vm/config.sh
             export SSH_PUBLIC_KEY_FILE="/home/runner/.ssh/id_rsa.pub"
