@@ -192,7 +192,11 @@ if ! cloud_init_finished "${IMAGE}"; then
     echo "Waiting for VM to finish cloud-init setup..."
     script -q -e -f /dev/null -c "sudo virsh console $VM_NAME" &
     VM_CONSOLE_PID=$!
-    virsh await "${VM_NAME}" --condition domain-inactive --timeout "${CLOUT_INIT_TIMEOUT}"
+
+    while ! $(sudo virsh domstate "${VM_NAME}" | grep -q '^shut off'); do
+        sleep 5
+    done
+
     kill "${VM_CONSOLE_PID}" || true
 
     # Detach the cloud-init ISO
