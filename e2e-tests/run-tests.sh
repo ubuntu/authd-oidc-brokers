@@ -120,14 +120,14 @@ if [ -n "${RERUNFAILED:-}" ]; then
 fi
 
 # Launch the domain if it's not already running, so that we can get its VNC port
-if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
+if ! sudo virsh domstate "${VM_NAME}" | grep -q '^running'; then
     # For some reason, when using external snapshot and the host was rebooted,
     # `virsh start` fails with a permission denied error.
     # Reverting to a snapshot first fixes this (and since it's a live snapshot,
     # we don't need to start the VM afterwards).
-    virsh snapshot-revert "${VM_NAME}" "${BROKER}-stable-configured"
+    sudo virsh snapshot-revert "${VM_NAME}" "${BROKER}-stable-configured"
 fi
-VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
+VNC_PORT=$(sudo virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
 
 # Create a temporary test run directory
 mkdir -p "${TEST_RUNS_DIR}"

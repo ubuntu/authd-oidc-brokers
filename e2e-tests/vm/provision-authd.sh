@@ -104,7 +104,7 @@ function install_broker() {
     local client_id="${!client_id_var}"
     local client_secret="${!client_secret_var:-}"
 
-    virsh snapshot-revert "${VM_NAME}" --snapshotname "${base_snapshot}"
+    sudo virsh snapshot-revert "${VM_NAME}" --snapshotname "${base_snapshot}"
 
     # Install broker, configure and restart services
     $SSH bash -euo pipefail -s <<-EOF
@@ -122,7 +122,7 @@ function install_broker() {
 	EOF
 
     # Reboot VM and wait until it's back
-    virsh reboot "${VM_NAME}"
+    sudo virsh reboot "${VM_NAME}"
     wait_for_system_running
 
     # Snapshot this broker installation
@@ -140,8 +140,8 @@ function install_brokers() {
 set -x
 
 # Define the VM
-if ! virsh dominfo "${VM_NAME}" &> /dev/null; then
-    virsh define "${LIBVIRT_XML}"
+if ! sudo virsh dominfo "${VM_NAME}" &> /dev/null; then
+    sudo virsh define "${LIBVIRT_XML}"
 fi
 
 INITIAL_SETUP_SNAPSHOT="initial-setup"
@@ -180,7 +180,7 @@ force_create_snapshot "authd-stable-installed"
 install_brokers "stable"
 
 # Remove the authd-stable-installed snapshot which is no longer needed
-virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-installed"
+sudo virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-installed"
 
 # Revert to the pre-authd setup snapshot before installing authd edge
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
@@ -204,4 +204,4 @@ force_create_snapshot "authd-edge-installed"
 install_brokers "edge"
 
 # Remove the authd-edge-installed snapshot which is no longer needed
-virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-edge-installed"
+sudo virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-edge-installed"

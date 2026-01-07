@@ -43,7 +43,7 @@ fi
 
 VM_NAME="e2e-runner-${RELEASE}"
 
-CID=$(virsh dumpxml "${VM_NAME}" | \
+CID=$(sudo virsh dumpxml "${VM_NAME}" | \
       xmllint --xpath 'string(//vsock/cid/@address)' -)
 
 exec ssh \
