@@ -125,7 +125,7 @@ jobs:
 
       - name: Run tests
         run: |
-          set +eux
+          set -eux
 
           ./e2e-tests/run-tests.sh \
             --user "${{ secrets.E2E_MSENTRA_USERNAME }}" \
