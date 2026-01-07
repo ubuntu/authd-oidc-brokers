@@ -88,10 +88,7 @@ jobs:
           path: ./e2e-tests/.yarf
 
       - name: Configure YARF
-        run: |
-          set -eu
-
-          ./e2e-tests/setup-yarf.sh
+        run: ./e2e-tests/setup-yarf.sh
 
       # TODO: Rename `provision-authd.sh` to `install-authd.sh` to avoid confusion
       - name: Provision authd and authd-msentraid
