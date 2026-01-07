@@ -193,9 +193,8 @@ if ! cloud_init_finished "${IMAGE}"; then
     script -q -e -f /dev/null -c "sudo virsh console $VM_NAME" &
     VM_CONSOLE_PID=$!
 
-    while ! $(sudo virsh domstate "${VM_NAME}" | grep -q '^shut off'); do
-        sleep 5
-    done
+    timeout "${CLOUT_INIT_TIMEOUT}" retry --delay 1 -- \
+      sh -c "sudo virsh domstate \"${VM_NAME}\" | grep -q '^shut off'"
 
     kill "${VM_CONSOLE_PID}" || true
 
