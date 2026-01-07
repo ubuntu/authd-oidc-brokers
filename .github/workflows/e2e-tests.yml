@@ -20,6 +20,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+      - name: Install test dependencies
+        run: |
+          set -eu
+          sudo apt-get update
+          ./e2e-tests/install-deps.sh
+
       - name: Set up SSH keys
         run: |
           set -eu
@@ -62,6 +69,7 @@ jobs:
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ env.RELEASE }}.qcow2
           key: e2e-runner-vm
+
 
       - name: Set up SSH keys for the VM provisioning
         run: |
