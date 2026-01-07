@@ -9,4 +9,5 @@ sudo apt-get -y install \
     libvirt-clients-qemu \
     libvirt-daemon-system \
     qemu-kvm \
+    retry \
     wget
