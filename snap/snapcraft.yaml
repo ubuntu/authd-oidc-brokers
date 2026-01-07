@@ -53,6 +53,9 @@ parts:
     plugin: rust
     build-packages:
       - libssl-dev
+    override-pull: |
+      snapcraftctl pull
+      cp "$SNAPCRAFT_PROJECT_DIR/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
       cargo install cargo-c
       cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of
@@ -70,7 +73,7 @@ parts:
     plugin: go
     go-buildtags: [withmsentraid]
     build-snaps:
-      - go          
+      - go
     after:
       - libhimmelblau
       - version
@@ -78,7 +81,7 @@ parts:
       - GOFLAGS: "-tags=release"
       # Add libhimmelblau to the CFLAGS and LDFLAGS so that it can be found by the Go linker.
       - CGO_CFLAGS: -I${CRAFT_STAGE}/include
-      - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau      
+      - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau
     override-build: |
       VERSION=$(craftctl get version)
       export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
