@@ -44,7 +44,15 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ env.RELEASE }}.qcow2
-          key: e2e-runner-vm
+          key: >-
+            e2e-runner-vm-${{ hashFiles(
+              'e2e-tests/vm/lib/libprovision.sh',
+              'e2e-tests/vm/cloud-init-template-noble.yaml',
+              'e2e-tests/vm/cloud-init-template-questing.yaml',
+              'e2e-tests/vm/install-provision-deps.sh',
+              'e2e-tests/vm/e2e-runner-template.xml',
+              'e2e-tests/vm/provision-ubuntu.sh'
+            ) }}
 
       - name: Install provision dependencies
         if: steps.cache-check.outputs.cache-hit != 'true'
@@ -68,7 +76,15 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ env.RELEASE }}.qcow2
-          key: e2e-runner-vm
+          key: >-
+            e2e-runner-vm-${{ hashFiles(
+              'e2e-tests/vm/lib/libprovision.sh',
+              'e2e-tests/vm/cloud-init-template-noble.yaml',
+              'e2e-tests/vm/cloud-init-template-questing.yaml',
+              'e2e-tests/vm/install-provision-deps.sh',
+              'e2e-tests/vm/e2e-runner-template.xml',
+              'e2e-tests/vm/provision-ubuntu.sh'
+            ) }}
 
 
       - name: Set up SSH keys for the VM provisioning
