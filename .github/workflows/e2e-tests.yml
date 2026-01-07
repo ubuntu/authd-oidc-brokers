@@ -65,6 +65,7 @@ jobs:
           set -eu
 
           mkdir -p ${{ env.ARTIFACTS_DIR }}
+          echo "verbose = off" >> ~/.wgetrc
           env VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
             RELEASE="${{ env.RELEASE }}" \
             ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
