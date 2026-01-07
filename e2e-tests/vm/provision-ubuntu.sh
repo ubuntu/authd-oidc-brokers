@@ -89,7 +89,7 @@ sudo -v
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
-ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${SCRIPT_DIR}/.artifacts/${RELEASE}}"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
