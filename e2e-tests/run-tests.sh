@@ -172,7 +172,7 @@ VNC_PORT="$VNC_PORT" \
 robot \
     --loglevel DEBUG \
     --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
-    --outdir "${OUTPUT_DIR}/${test_name}" \
+    --outdir "${OUTPUT_DIR}" \
     "${ROBOT_ARGS[@]}" \
     "$@" \
     tests \
