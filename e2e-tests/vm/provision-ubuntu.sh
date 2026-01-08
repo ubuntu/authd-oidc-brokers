@@ -89,7 +89,7 @@ sudo -v
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
-ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${SCRIPT_DIR}/.artifacts/${RELEASE}}"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
@@ -118,11 +118,11 @@ if [ "${FORCE:-}" = true ]; then
     echo "Force provisioning enabled. Removing existing VM and artifacts."
 
     # Destroy and undefine the VM if it exists
-    if virsh dominfo "${VM_NAME}" &> /dev/null; then
-        if virsh domstate "${VM_NAME}" | grep -q '^running'; then
-            virsh destroy "${VM_NAME}"
+    if sudo virsh dominfo "${VM_NAME}" &> /dev/null; then
+        if sudo virsh domstate "${VM_NAME}" | grep -q '^running'; then
+            sudo virsh destroy "${VM_NAME}"
         fi
-        virsh undefine "${VM_NAME}" --snapshots-metadata
+        sudo virsh undefine "${VM_NAME}" --snapshots-metadata
     fi
 
     # Remove artifacts of this VM
@@ -130,7 +130,7 @@ if [ "${FORCE:-}" = true ]; then
 fi
 
 # Copy and resize the image
-IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     mkdir -p "${ARTIFACTS_DIR}"
     cp "${SOURCE_IMAGE}" "${IMAGE}"
@@ -165,38 +165,42 @@ else
 fi
 
 # Define the VM
-if ! virsh dominfo "${VM_NAME}" &> /dev/null; then
-    virsh define "${LIBVIRT_XML}"
+if ! sudo virsh dominfo "${VM_NAME}" &> /dev/null; then
+    sudo virsh define "${LIBVIRT_XML}"
 else
     echo "VM already defined: ${VM_NAME}"
 fi
 
 # Attach the cloud-init ISO
-if ! virsh domblklist "${VM_NAME}" | grep -q "seed.iso"; then
-    virsh attach-disk "${VM_NAME}" "${CLOUD_INIT_ISO}" vdb --targetbus virtio --type disk --mode readonly --config
+if ! sudo virsh domblklist "${VM_NAME}" | grep -q "seed.iso"; then
+    sudo virsh attach-disk "${VM_NAME}" "${CLOUD_INIT_ISO}" vdb --targetbus virtio --type disk --mode readonly --config
 else
     echo "Cloud-init ISO already attached to VM: ${VM_NAME}"
 fi
 
 # Ensure the VM is shut off before proceeding
-if virsh domstate "${VM_NAME}" | grep -q '^running'; then
-    virsh destroy "${VM_NAME}"
+if sudo virsh domstate "${VM_NAME}" | grep -q '^running'; then
+    sudo virsh destroy "${VM_NAME}"
 fi
 
 # Start the VM and wait for it to finish the initial setup
 if ! cloud_init_finished "${IMAGE}"; then
     # Start the VM to let cloud-init do its work
-    virsh start "${VM_NAME}"
+    sudo virsh start "${VM_NAME}"
 
     # Print the console output and wait until cloud-init has finished and the VM has shut down
     echo "Waiting for VM to finish cloud-init setup..."
-    script -q -e -f /dev/null -c "virsh console $VM_NAME" &
+    script -q -e -f /dev/null -c "sudo virsh console $VM_NAME" &
     VM_CONSOLE_PID=$!
-    virsh await "${VM_NAME}" --condition domain-inactive --timeout "${CLOUT_INIT_TIMEOUT}"
+
+    while ! $(sudo virsh domstate "${VM_NAME}" | grep -q '^shut off'); do
+        sleep 5
+    done
+
     kill "${VM_CONSOLE_PID}" || true
 
     # Detach the cloud-init ISO
-    virsh detach-disk "${VM_NAME}" vdb --config
+    sudo virsh detach-disk "${VM_NAME}" vdb --config
 
     if [ -z "${NO_SNAPSHOT:-}" ]; then
         boot_system

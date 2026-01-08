@@ -29,8 +29,9 @@ Options:
   -s, --totp-secret <secret>   Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
   -b, --broker <broker>        Broker to test (can also be set via BROKER environment variable)
   -r, --release <release>      Ubuntu release to test (e.g., 'questing', can also be set via RELEASE environment variable)
-      --rerunfailed            Re-run only the tests that failed in the previous run
+  -o, --output-dir DIR         Directory to store test outputs (default: temporary directory)
   -h, --help                   Show this help message and exit
+      --rerunfailed            Re-run only the tests that failed in the previous run
 EOF
 }
 
@@ -40,6 +41,7 @@ TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
 # Parse command line arguments
 TESTS_TO_RUN=""
+OUTPUT_DIR=""
 while [[ $# -gt 0 ]]; do
     key="$1"
 
@@ -67,6 +69,10 @@ while [[ $# -gt 0 ]]; do
         --rerunfailed)
             RERUNFAILED=1
             shift
+            ;;
+        --output-dir|-o)
+            OUTPUT_DIR="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -114,20 +120,27 @@ if [ -n "${RERUNFAILED:-}" ]; then
 fi
 
 # Launch the domain if it's not already running, so that we can get its VNC port
-if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
+if ! sudo virsh domstate "${VM_NAME}" | grep -q '^running'; then
     # For some reason, when using external snapshot and the host was rebooted,
     # `virsh start` fails with a permission denied error.
     # Reverting to a snapshot first fixes this (and since it's a live snapshot,
     # we don't need to start the VM afterwards).
-    virsh snapshot-revert "${VM_NAME}" "${BROKER}-stable-configured"
+    sudo virsh snapshot-revert "${VM_NAME}" "${BROKER}-stable-configured"
 fi
-VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
+VNC_PORT=$(sudo virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
 
 # Create a temporary test run directory
 mkdir -p "${TEST_RUNS_DIR}"
 TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 cd "${TEST_RUN_DIR}"
+
+if [ -z "${OUTPUT_DIR:-}" ]; then
+    OUTPUT_DIR=output
+    echo "No output directory specified, using current test run directory."
+fi
+
+mkdir -p "${OUTPUT_DIR}" resources
 
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
@@ -159,6 +172,7 @@ VNC_PORT="$VNC_PORT" \
 robot \
     --loglevel DEBUG \
     --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
+    --outdir "${OUTPUT_DIR}/${test_name}" \
     "${ROBOT_ARGS[@]}" \
     "$@" \
     tests \
