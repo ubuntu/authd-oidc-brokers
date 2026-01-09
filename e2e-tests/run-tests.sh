@@ -100,6 +100,9 @@ if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] 
     exit 1
 fi
 
+# Ask early for the sudo password to ensure the prompt is visible
+sudo -v
+
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
 if [ -z "${TESTS_TO_RUN}" ]; then
