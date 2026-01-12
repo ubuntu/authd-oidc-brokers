@@ -1,7 +1,27 @@
 name: authd-oidc
-summary: OIDC Broker for authd
+summary: authd - OIDC Authentication for Ubuntu
 description: |
-  Broker that enables OIDC authentication for authd.
+  authd is a powerful authentication service for Ubuntu, designed to integrate with OIDC identity providers.
+  It delivers a secure, flexible solution for organizations and individuals who are transitioning
+  to cloud-based identity management on Ubuntu workstations and servers.
+  authd uses the OAuth Device Authorization Grant and ensures a consistent and secure login experience across
+  Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
+
+  Key Features
+  * Cloud identity provider Integration: Connects with any OpenID Connect compliant identity provider.
+  * Secure Login: authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
+    and security.
+  * Open-Source: Free and community-driven, with contributions welcomed.
+  * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
+  * authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
+    Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
+    contribute or provide feedback.
+icon: snap/logo.png
+website:
+  - https://github.com/ubuntu/authd-oidc-brokers
+  - https://github.com/ubuntu/authd
+issues: https://github.com/ubuntu/authd/issues
+source-code: https://github.com/ubuntu/authd-oidc-brokers/tree/oidc
 adopt-info: version
 grade: stable
 base: core24
@@ -18,6 +38,8 @@ apps:
       - network
     restart-condition: always
     activates-on: [dbus-authd]
+    environment:
+      SYSLOG_IDENTIFIER: authd-oidc
 
 slots:
   dbus-authd:
@@ -34,6 +56,14 @@ parts:
       - go
     build-environment:
       - GOFLAGS: "-tags=release"
+    override-build: |
+      go mod download all
+      go mod vendor
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+      go build -o ${GOBIN}/authd-oidc ./cmd/authd-oidc
+    after:
+      - version
   config:
     source: conf/
     source-type: local
