@@ -1,5 +1,5 @@
 name: authd-msentraid
-summary: authd - MS Entra ID Cloud Authentication for Ubuntu
+summary: authd - Microsoft Entra ID Cloud Authentication for Ubuntu
 description: |
   authd is a powerful authentication service for Ubuntu, designed to integrate with cloud identity providers like
   Microsoft Entra ID. It delivers a secure, flexible solution for organizations and individuals who are transitioning
