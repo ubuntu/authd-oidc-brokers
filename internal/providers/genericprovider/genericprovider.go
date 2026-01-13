@@ -23,7 +23,7 @@ func New() GenericProvider {
 
 // AdditionalScopes returns the generic scopes required by the provider.
 func (p GenericProvider) AdditionalScopes() []string {
-	return []string{oidc.ScopeOfflineAccess}
+	return []string{}
 }
 
 // AuthOptions is a no-op when no specific provider is in use.
