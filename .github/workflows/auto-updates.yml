@@ -63,7 +63,7 @@ jobs:
         - name: Find generated changes
           if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
           id: check-diff
-          uses: canonical/desktop-engineering/gh-actions/common/has-diff@main
+          uses: canonical/desktop-engineering/gh-actions/common/has-diff@submodule-diff
           with:
             working-directory: ./internal/consts/
             fail-on-diff: false
