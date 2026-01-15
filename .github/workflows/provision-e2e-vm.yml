@@ -57,6 +57,11 @@ jobs:
         run: |
           set -eu
 
+          # Configure PATH to find sudo virsh wrapper
+          repo_path="/home/runner/work/authd-oidc-brokers/authd-oidc-brokers"
+          sudo chmod +x "${repo_path}/e2e-tests/vm/helpers/virsh"
+          export PATH="${repo_path}/e2e-tests/vm/helpers:${PATH}"
+
           # Set up temporary directory for VM artifacts
           mkdir -p ${{ env.ARTIFACTS_DIR }}
 
