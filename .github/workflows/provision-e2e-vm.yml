@@ -128,6 +128,14 @@ jobs:
         E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
         E2E_VM_SSH_PUB_KEY: ${{ secrets.E2E_VM_SSH_PUB_KEY }}
 
+    - name: Disable libvirt confinement
+      run: |
+        set -eux
+
+        # Disable libvirtd confinement because it denies access to the artifacts directory under /tmp
+        echo "security_default_confined = 0" | sudo tee -a /etc/libvirt/qemu.conf
+        sudo systemctl restart libvirtd
+
     - name: Provision authd and the broker
       run: |
         set -eux
